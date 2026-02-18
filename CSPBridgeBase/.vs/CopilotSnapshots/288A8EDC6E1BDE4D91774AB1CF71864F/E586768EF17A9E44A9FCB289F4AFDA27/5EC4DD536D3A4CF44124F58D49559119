@@ -1,7 +1,0 @@
-﻿#include "pch.h"
-
-
-void TRIGLAV_PLUGIN_API TriglavPluginCall(TriglavPlugInInt* result, TriglavPlugInPtr* data, TriglavPlugInInt selector, TriglavPlugInServer* pluginServer, TriglavPlugInPtr reserved)
-{
-
-}

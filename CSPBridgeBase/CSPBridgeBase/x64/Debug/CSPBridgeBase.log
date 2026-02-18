@@ -1,7 +1,0 @@
-﻿  BridgeBase.cpp
-D:\Develop\Projects\CSPBridge\CSPBridgeBase\BridgeBase.cpp(1,1): warning C4819: ファイルは、現在のコード ページ (932) で表示できない文字を含んでいます。データの損失を防ぐために、ファイルを Unicode 形式で保存してください。
-  BridgeCallback.cpp
-D:\Develop\Projects\CSPBridge\CSPBridgeBase\BridgeCallback.cpp(1,1): warning C4819: ファイルは、現在のコード ページ (932) で表示できない文字を含んでいます。データの損失を防ぐために、ファイルを Unicode 形式で保存してください。
-  コードを生成中...
-     ライブラリ D:\Develop\Projects\CSPBridge\CSPBridgeBase\x64\Debug\CSPBridgeBase.lib とオブジェクト D:\Develop\Projects\CSPBridge\CSPBridgeBase\x64\Debug\CSPBridgeBase.exp を作成中
-  CSPBridgeBase.vcxproj -> D:\Develop\Projects\CSPBridge\CSPBridgeBase\x64\Debug\CSPBridgeBase.dll
