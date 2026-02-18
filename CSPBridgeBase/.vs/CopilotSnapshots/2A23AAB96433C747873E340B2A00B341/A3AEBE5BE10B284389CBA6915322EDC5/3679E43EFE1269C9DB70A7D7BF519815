@@ -1,0 +1,18 @@
+﻿#pragma once
+
+/// <summary>
+/// BridgeBaseクラス
+/// </summary>
+class BridgeBase
+{
+public:
+	BridgeBase();
+	virtual ~BridgeBase();
+
+public:
+	bool Initialize(TriglavPlugInServer* pluginServer);
+	void Terminate(TriglavPlugInServer* pluginServer, TriglavPlugInPtr* data);
+
+private:
+
+};

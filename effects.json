@@ -1,0 +1,7 @@
+{
+    "effects": [
+        { "id": "Blur" },
+        { "id": "Sharpen" },
+        { "id": "Mosaic" }
+    ]
+}

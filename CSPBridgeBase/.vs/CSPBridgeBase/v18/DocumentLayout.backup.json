@@ -1,0 +1,91 @@
+{
+  "Version": 1,
+  "WorkspaceRootPath": "D:\\Develop\\Projects\\CSPBridge\\CSPBridgeBase\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{EC3E5680-335D-4384-BFB8-AC2E32B83084}|CSPBridgeBase.vcxproj|D:\\Develop\\Projects\\CSPBridge\\CSPBridgeBase\\BridgeBase.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{EC3E5680-335D-4384-BFB8-AC2E32B83084}|CSPBridgeBase.vcxproj|solutionrelative:BridgeBase.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{EC3E5680-335D-4384-BFB8-AC2E32B83084}|CSPBridgeBase.vcxproj|D:\\Develop\\Projects\\CSPBridge\\CSPBridgeBase\\BridgeBase.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{EC3E5680-335D-4384-BFB8-AC2E32B83084}|CSPBridgeBase.vcxproj|solutionrelative:BridgeBase.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{EC3E5680-335D-4384-BFB8-AC2E32B83084}|CSPBridgeBase.vcxproj|D:\\Develop\\Projects\\CSPBridge\\CSPBridgeBase\\BridgeCallback.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{EC3E5680-335D-4384-BFB8-AC2E32B83084}|CSPBridgeBase.vcxproj|solutionrelative:BridgeCallback.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{EC3E5680-335D-4384-BFB8-AC2E32B83084}|CSPBridgeBase.vcxproj|D:\\DEVELOP\\PROJECTS\\CSP_FILTERPLUGIN\\FILTERPLUGIN\\TRIGLAVPLUGINSDK\\TRIGLAVPLUGINDEFINE.H||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    }
+  ],
+  "DocumentGroupContainers": [
+    {
+      "Orientation": 0,
+      "VerticalTabListWidth": 256,
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 3,
+          "Children": [
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{40ea2e6b-2121-4bb8-a43e-c83c04b51041}"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "TriglavPlugInDefine.h",
+              "DocumentMoniker": "D:\\Develop\\Projects\\CSP_FilterPlugIn\\FilterPlugIn\\TriglavPlugInSDK\\TriglavPlugInDefine.h",
+              "RelativeDocumentMoniker": "..\\..\\CSP_FilterPlugIn\\FilterPlugIn\\TriglavPlugInSDK\\TriglavPlugInDefine.h",
+              "ToolTip": "D:\\Develop\\Projects\\CSP_FilterPlugIn\\FilterPlugIn\\TriglavPlugInSDK\\TriglavPlugInDefine.h",
+              "RelativeToolTip": "..\\..\\CSP_FilterPlugIn\\FilterPlugIn\\TriglavPlugInSDK\\TriglavPlugInDefine.h",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAACoAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000680|",
+              "WhenOpened": "2026-02-17T13:18:53.358Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "BridgeBase.h",
+              "DocumentMoniker": "D:\\Develop\\Projects\\CSPBridge\\CSPBridgeBase\\BridgeBase.h",
+              "RelativeDocumentMoniker": "BridgeBase.h",
+              "ToolTip": "D:\\Develop\\Projects\\CSPBridge\\CSPBridgeBase\\BridgeBase.h",
+              "RelativeToolTip": "BridgeBase.h",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAB8AAAA7AAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000680|",
+              "WhenOpened": "2026-02-17T13:11:36.517Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "BridgeBase.cpp",
+              "DocumentMoniker": "D:\\Develop\\Projects\\CSPBridge\\CSPBridgeBase\\BridgeBase.cpp",
+              "RelativeDocumentMoniker": "BridgeBase.cpp",
+              "ToolTip": "D:\\Develop\\Projects\\CSPBridge\\CSPBridgeBase\\BridgeBase.cpp",
+              "RelativeToolTip": "BridgeBase.cpp",
+              "ViewState": "AgIAADAAAAAAAAAAAAAAABoAAAAVAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
+              "WhenOpened": "2026-02-16T14:20:14.453Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "BridgeCallback.cpp",
+              "DocumentMoniker": "D:\\Develop\\Projects\\CSPBridge\\CSPBridgeBase\\BridgeCallback.cpp",
+              "RelativeDocumentMoniker": "BridgeCallback.cpp",
+              "ToolTip": "D:\\Develop\\Projects\\CSPBridge\\CSPBridgeBase\\BridgeCallback.cpp",
+              "RelativeToolTip": "BridgeCallback.cpp",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAADsAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
+              "WhenOpened": "2026-02-16T14:17:30.283Z",
+              "EditorCaption": ""
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
