@@ -1,4 +1,5 @@
 #include "pch.h"
+#include "BridgeFilter.h"
 #include "BridgeBase.h"
 #include <assert.h>
 #include <filesystem>
@@ -58,14 +59,14 @@ BridgeBase::~BridgeBase()
 /// </summary>
 /// <param name="pluginServer"></param>
 /// <returns></returns>
-bool BridgeBase::Initialize(
+TriglavPlugInInt BridgeBase::Initialize(
 	TriglavPlugInServer* pluginServer
 )
 {
 	if (pluginServer == nullptr)
 	{
 		assert(false);
-		return false;
+		return kTriglavPlugInCallResultFailed;
 	}
 
     // CoreCLR (hostfxr) を埋め込むため、hostfxr をロードしてデリゲートを取得する必要があります
@@ -74,7 +75,7 @@ bool BridgeBase::Initialize(
     {
         // hostfxr を見つけられませんでした。マネージランタイムは利用できません。
         // プラグインがネイティブのみで動作するように致命的エラーにせず true を返します。
-        return true;
+        return kTriglavPlugInCallResultFailed;
     }
 
     // hostfxr_main や hostfxr_initialize_for_runtime_config のシンボルを取得します。
@@ -86,14 +87,14 @@ bool BridgeBase::Initialize(
         // hostfxr のレイアウトが予想と異なります。
         ::FreeLibrary(m_hHostfxrLib);
         m_hHostfxrLib = nullptr;
-        return true;
+        return kTriglavPlugInCallResultFailed;
     }
 
     // 注意: 実際にホストするには runtimeconfig.json を使って hostfxr_initialize_for_runtime_config を呼び、
     // hostfxr_get_runtime_delegate を使って load_assembly_and_get_function_pointer を取得する必要があります。
     // フルフローの実装は長くなるため、マネージの読み込みは後で実装します。
 
-    return true;
+    return kTriglavPlugInCallResultSuccess;
 }
 
 /// <summary>
@@ -101,7 +102,7 @@ bool BridgeBase::Initialize(
 /// </summary>
 /// <param name="pluginServer"></param>
 /// <param name="data"></param>
-void BridgeBase::Terminate(
+TriglavPlugInInt BridgeBase::Terminate(
 	TriglavPlugInServer* pluginServer,
 	TriglavPlugInPtr* data
 )
@@ -111,4 +112,48 @@ void BridgeBase::Terminate(
         ::FreeLibrary(m_hHostfxrLib);
         m_hHostfxrLib = nullptr;
     }
+    return kTriglavPlugInCallResultSuccess;
+}
+
+/// <summary>
+/// 
+/// </summary>
+/// <param name="pluginServer"></param>
+/// <param name="data"></param>
+/// <param name="proc"></param>
+/// <returns></returns>
+TriglavPlugInInt BridgeBase::FilterInitialize(
+    TriglavPlugInServer* pluginServer,
+    TriglavPlugInPtr* data
+)
+{
+    return kTriglavPlugInCallResultSuccess;
+}
+
+/// <summary>
+/// 
+/// </summary>
+/// <param name="pluginServer"></param>
+/// <param name="data"></param>
+/// <returns></returns>
+TriglavPlugInInt BridgeBase::FilterTerminate(
+    TriglavPlugInServer* pluginServer,
+    TriglavPlugInPtr* data
+)
+{
+    return kTriglavPlugInCallResultSuccess;
+}
+
+/// <summary>
+/// 
+/// </summary>
+/// <param name="pluginServer"></param>
+/// <param name="data"></param>
+/// <returns></returns>
+TriglavPlugInInt BridgeBase::FilterRun(
+    TriglavPlugInServer* pluginServer, 
+    TriglavPlugInPtr* data
+)
+{
+    return kTriglavPlugInCallResultSuccess;
 }

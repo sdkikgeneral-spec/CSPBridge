@@ -18,14 +18,20 @@ public:
     /// </summary>
     /// <param name="pluginServer"></param>
     /// <returns></returns>
-    bool Initialize(TriglavPlugInServer* pluginServer);
-    
+    TriglavPlugInInt Initialize(TriglavPlugInServer* pluginServer);
+
     /// <summary>
     /// BridgeBaseの終了
     /// </summary>
     /// <param name="pluginServer"></param>
     /// <param name="data"></param>
-    void Terminate(TriglavPlugInServer* pluginServer, TriglavPlugInPtr* data);
+    TriglavPlugInInt Terminate(TriglavPlugInServer* pluginServer, TriglavPlugInPtr* data);
+
+	TriglavPlugInInt FilterInitialize(TriglavPlugInServer* pluginServer, TriglavPlugInPtr* data);
+
+	TriglavPlugInInt FilterTerminate(TriglavPlugInServer* pluginServer, TriglavPlugInPtr* data);
+
+	TriglavPlugInInt FilterRun(TriglavPlugInServer* pluginServer, TriglavPlugInPtr* data);
 
     // マネージ側のエントリポイントを呼び出す（ロード済みの場合）。引数は void* として渡されます。
     // マネージ側のメソッドは UnmanagedCallersOnly でエクスポートされ、互換のあるシグネチャである必要があります。例:
