@@ -7,3 +7,46 @@ C#で開発する場合、特にメモリの解放処理忘れなどが簡略化
 
 # 2. 構成
 CSPプラグインは、C++にて開発されるため、一工夫がいります。
+
+# 3. MesonでJSONを扱う方法（jq使用）
+Meson 1.10 では `read_json` や `import('json')` が使えないため、`jq` を使って `effects.json` から値を取り出します。
+
+## 3.1 Windowsでjqをインストール
+PowerShell で以下を実行します。
+
+```powershell
+winget install jqlang.jq
+```
+
+インストール後、新しいターミナルで確認します。
+
+```powershell
+jq --version
+```
+
+## 3.2 Meson側の考え方
+`meson.build` では次の流れで JSON を利用します。
+
+1. `find_program('jq')` で jq を検出
+2. `run_command()` で `jq -r ".effects[].id" effects.json` を実行
+3. 標準出力を改行で分割して `effect_ids` を作成
+4. `foreach effect_id : effect_ids` でターゲット生成
+
+## 3.3 例: effects.json
+
+```json
+{
+	"effects": [
+		{ "id": "Blur" },
+		{ "id": "Sharpen" },
+		{ "id": "Mosaic" }
+	]
+}
+```
+
+## 3.4 再設定コマンド
+`meson.build` を変更したあとは再設定を実行します。
+
+```powershell
+meson setup build --reconfigure
+```
