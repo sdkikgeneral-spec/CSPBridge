@@ -33,6 +33,12 @@
     <ClInclude Include="BridgeBase.h">
       <Filter>Source Files\BridgeBase</Filter>
     </ClInclude>
+    <ClInclude Include="BridgeFilter.h">
+      <Filter>Source Files\BridgeBase</Filter>
+    </ClInclude>
+    <ClInclude Include="BridgeProperty.h">
+      <Filter>Source Files\BridgeBase</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="BridgeCallback.cpp">
@@ -46,6 +52,12 @@
     </ClCompile>
     <ClCompile Include="pch.cpp">
       <Filter>Source Files\Win</Filter>
+    </ClCompile>
+    <ClCompile Include="BridgeFilter.cpp">
+      <Filter>Source Files\BridgeBase</Filter>
+    </ClCompile>
+    <ClCompile Include="BridgeProperty.cpp">
+      <Filter>Source Files\BridgeBase</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
