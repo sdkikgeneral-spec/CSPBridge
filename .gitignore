@@ -3,3 +3,5 @@ build/
 CSPBridgeBase/.vs/
 CSPBridgeBase/CSPBridgeBase/
 CSPBridgeBase/x64/
+CSPBridgeEffects/bin/
+CSPBridgeEffects/obj/
