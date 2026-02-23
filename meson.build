@@ -1,4 +1,4 @@
-project('CSPBridge', 'cpp',
+project('CSPBridge', 'cpp', 'cs',
   version: '1.0.0',
   default_options: ['cpp_std=c++17'])
 
