@@ -116,7 +116,7 @@ TriglavPlugInInt BridgeBase::Terminate(
 }
 
 /// <summary>
-/// 
+/// フィルタの初期化
 /// </summary>
 /// <param name="pluginServer"></param>
 /// <param name="data"></param>
@@ -131,7 +131,7 @@ TriglavPlugInInt BridgeBase::FilterInitialize(
 }
 
 /// <summary>
-/// 
+/// フィルタの終了処理
 /// </summary>
 /// <param name="pluginServer"></param>
 /// <param name="data"></param>
@@ -145,7 +145,7 @@ TriglavPlugInInt BridgeBase::FilterTerminate(
 }
 
 /// <summary>
-/// 
+/// フィルタの実行
 /// </summary>
 /// <param name="pluginServer"></param>
 /// <param name="data"></param>

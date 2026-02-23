@@ -25,12 +25,31 @@ public:
     /// </summary>
     /// <param name="pluginServer"></param>
     /// <param name="data"></param>
+    /// <returns></returns>
     TriglavPlugInInt Terminate(TriglavPlugInServer* pluginServer, TriglavPlugInPtr* data);
 
+	/// <summary>
+	/// フィルタの初期化
+	/// </summary>
+	/// <param name="pluginServer"></param>
+	/// <param name="data"></param>
+	/// <returns></returns>
 	TriglavPlugInInt FilterInitialize(TriglavPlugInServer* pluginServer, TriglavPlugInPtr* data);
 
+    /// <summary>
+    /// フィルタの終了処理
+    /// </summary>
+    /// <param name="pluginServer"></param>
+    /// <param name="data"></param>
+    /// <returns></returns>
 	TriglavPlugInInt FilterTerminate(TriglavPlugInServer* pluginServer, TriglavPlugInPtr* data);
 
+	/// <summary>
+	/// フィルタの実行
+	/// </summary>
+	/// <param name="pluginServer"></param>
+	/// <param name="data"></param>
+	/// <returns></returns>
 	TriglavPlugInInt FilterRun(TriglavPlugInServer* pluginServer, TriglavPlugInPtr* data);
 
     // マネージ側のエントリポイントを呼び出す（ロード済みの場合）。引数は void* として渡されます。
