@@ -20,6 +20,9 @@ if effect_ids.length() == 1 and effect_ids[0] == ''
   effect_ids = []
 endif
 
+# C# (CSPBridgeEffects) build configuration
+subdir('CSPBridgeEffects')
+
 # Windows用C++ DLLビルド設定
 if host_machine.system() == 'windows'
   # CSPBridgeBase ソースコード
