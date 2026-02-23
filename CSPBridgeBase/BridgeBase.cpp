@@ -52,6 +52,7 @@ BridgeBase::BridgeBase()
 /// </summary>
 BridgeBase::~BridgeBase()
 {
+    Terminate(nullptr, nullptr);
 }
 
 /// <summary>
