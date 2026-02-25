@@ -41,7 +41,7 @@ if host_machine.system() == 'windows'
         cspbridge_sources,
         include_directories: [
             'CSPBridgeBase',
-            '../CSP_FilterPlugIn/FilterPlugIn/TriglavPlugInSDK'
+            './CSP_FilterPlugIn/FilterPlugIn/TriglavPlugInSDK'
         ],
         cpp_args: [
             '/D_WINDOWS',
