@@ -1,5 +1,6 @@
 .vs/
 build/
+CSP_FilterPlugIn/
 CSPBridgeBase/.vs/
 CSPBridgeBase/CSPBridgeBase/
 CSPBridgeBase/x64/
