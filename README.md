@@ -4,6 +4,8 @@ CLIP STUDIO PAINT (CSP) のフィルタプラグインを **C#** で開発する
 
 C++ のプラグインエントリポイントから CoreCLR を経由して C# のコードを呼び出すことで、C# の豊富なエコシステムや SIMD 対応ライブラリを活用しながら CSP プラグインを開発できます。
 
+English README: [docs/README_en.md](docs/README_en.md)
+
 ---
 
 ## 目次
