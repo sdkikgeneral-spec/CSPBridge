@@ -1,58 +1,268 @@
-# 1. プロジェクトの説明
-このプロジェクトは、CLIP STUDIO PAINT（以下CSP）のプラグインをC#で開発するためのベースを作るプロジェクトです。
-C++での開発は、現代において敷居が一段あがってしまう雰囲気があります。
-C#で開発する場合、特にメモリの解放処理忘れなどが簡略化されます。
-また、C#だとSIMDも扱えるため、C++に近づける速度も期待できます。
-（速度面でいくとnativeAOTでビルドするという手もあるが、それはまた別で解説します）
+# CSPBridge
 
-# 2. 構成
-CSPプラグインは、C++にて開発されるため、一工夫がいります。
+CLIP STUDIO PAINT (CSP) のフィルタプラグインを **C#** で開発するためのブリッジフレームワークです。
 
-# 3. MesonでJSONを扱う方法（jq使用）
-Meson 1.10 では `read_json` や `import('json')` が使えないため、`jq` を使って `effects.json` から値を取り出します。
+C++ のプラグインエントリポイントから CoreCLR を経由して C# のコードを呼び出すことで、C# の豊富なエコシステムや SIMD 対応ライブラリを活用しながら CSP プラグインを開発できます。
 
-## 3.1 Windowsでjqをインストール
-このリポジトリ直下にある `inst.ps1` でインストールできます。
+---
+
+## 目次
+
+1. [ファイル構成](#1-ファイル構成)
+2. [前提条件](#2-前提条件)
+3. [ビルド手順](#3-ビルド手順)
+4. [meson_options.txt — ビルドオプション](#4-meson_optionstxt--ビルドオプション)
+5. [エフェクトの追加方法](#5-エフェクトの追加方法)
+6. [C# エフェクト実装ガイド](#6-c-エフェクト実装ガイド)
+7. [補足](#7-補足)
+
+---
+
+## 1. ファイル構成
+
+```
+CSPBridge/
+├── meson.build               # ルートビルド定義
+├── meson_options.txt         # ビルドオプション（plugin_path など）
+├── effects.json              # エフェクト ID 一覧
+├── copy_to_plugin.py         # ビルド後コピースクリプト（meson が呼び出す）
+├── inst.ps1                  # 依存ツールインストールスクリプト
+│
+├── CSPBridgeBase/            # C++ ブリッジ共通実装
+│   ├── BridgeBase.cpp/h      # CoreCLR ホスティング・関数ポインタ管理
+│   ├── BridgeCallback.cpp    # TriglavPlugIn コールバックのディスパッチ
+│   ├── dllmain.cpp           # DLL エントリポイント
+│   └── pch.cpp/h             # プリコンパイル済みヘッダ
+│
+├── CSPBridgeEffects/         # C# エフェクトライブラリ
+│   ├── CSPBridgeEffects.csproj
+│   ├── meson.build
+│   ├── Effects/
+│   │   ├── EffectTemplate.cs.in   # エフェクトクラスのテンプレート
+│   │   └── EffectHelper.cs        # モジュール・フィルタ初期化ヘルパー
+│   └── Library/
+│       └── SDK/              # TriglavPlugIn SDK の C# バインディング
+│
+└── CSP_FilterPlugIn/
+    └── FilterPlugIn/
+        └── TriglavPlugInSDK/ # TriglavPlugIn SDK ヘッダ（C++）
+```
+
+---
+
+## 2. 前提条件
+
+| ツール | バージョン | 入手方法 |
+|---|---|---|
+| Windows | 10 / 11 (x64) | — |
+| Visual Studio | 2022 以降 (C++ ビルドツール) | [visualstudio.microsoft.com](https://visualstudio.microsoft.com/) |
+| .NET SDK | 10.0 以降 | [dot.net](https://dotnet.microsoft.com/) |
+| Meson | 1.1 以降 | `winget install mesonbuild.meson` |
+| Ninja | （Meson に同梱） | Meson インストール時に自動 |
+| jq | 1.6 以降 | `winget install jqlang.jq` |
+
+### まとめてインストール（inst.ps1）
+
+リポジトリ直下の `inst.ps1` で上記ツールを一括インストールできます。
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\inst.ps1
 ```
 
-直接インストールする場合は、PowerShell で以下を実行します。
-
-```powershell
-winget install jqlang.jq
-```
-
 インストール後、新しいターミナルで確認します。
 
 ```powershell
+meson --version
+dotnet --version
 jq --version
 ```
 
-## 3.2 Meson側の考え方
-`meson.build` では次の流れで JSON を利用します。
+---
 
-1. `find_program('jq')` で jq を検出
-2. `run_command()` で `jq -r ".effects[].id" effects.json` を実行
-3. 標準出力を改行で分割して `effect_ids` を作成
-4. `foreach effect_id : effect_ids` でターゲット生成
+## 3. ビルド手順
 
-## 3.3 例: effects.json
+### 3.1 初回セットアップ
 
-```json
-{
-	"effects": [
-		{ "id": "Blur" },
-		{ "id": "Sharpen" },
-		{ "id": "Mosaic" }
-	]
-}
+```powershell
+meson setup build
 ```
 
-## 3.4 再設定コマンド
-`meson.build` を変更したあとは再設定を実行します。
+デバッグ用に **プラグインフォルダへの自動コピー** を有効にする場合は [`plugin_path` オプション](#4-meson_optionstxt--ビルドオプション) を指定します。
+
+```powershell
+meson setup build -Dplugin_path="C:\path\to\CLIP STUDIO PAINT\plug-in"
+```
+
+### 3.2 ビルド
+
+```powershell
+meson compile -C build
+```
+
+ビルドに成功すると次のファイルが生成されます。
+
+| ファイル | 説明 |
+|---|---|
+| `build/Blur.cpm` | Blur エフェクト用 C++ ブリッジ DLL |
+| `build/Sharpen.cpm` | Sharpen エフェクト用 C++ ブリッジ DLL |
+| `build/Mosaic.cpm` | Mosaic エフェクト用 C++ ブリッジ DLL |
+| `build/CSPBridgeEffects/CSPBridgeEffects.dll` | C# エフェクトライブラリ |
+| `build/CSPBridgeEffects/CSPBridgeEffects.runtimeconfig.json` | CoreCLR 初期化に必要なランタイム設定 |
+
+`plugin_path` を指定している場合は、ビルド完了後にこれら 5 ファイルが自動的に指定フォルダへコピーされます。
+
+### 3.3 再設定（オプション変更時）
+
+`meson_options.txt` や `meson.build` を変更した後は再設定が必要です。
 
 ```powershell
 meson setup build --reconfigure
 ```
+
+`plugin_path` を変更する場合も同様です。
+
+```powershell
+meson setup build --reconfigure -Dplugin_path="新しいパス"
+```
+
+---
+
+## 4. meson_options.txt — ビルドオプション
+
+[`meson_options.txt`](meson_options.txt) にビルド時のオプションを定義しています。
+
+### plugin_path
+
+ビルド成功後にプラグインファイルを自動コピーするフォルダを指定します。
+
+```
+option('plugin_path',
+  type: 'string',
+  value: '',
+  description: 'ビルド後にプラグインファイルをコピーするフォルダ（空の場合はコピーしない）',
+)
+```
+
+| 設定例 | コマンド |
+|---|---|
+| 設定なし（コピーしない） | `meson setup build` |
+| コピー先を指定 | `meson setup build -Dplugin_path="C:\path\to\plug-in"` |
+| コピー先を変更 | `meson setup build --reconfigure -Dplugin_path="新しいパス"` |
+
+コピーされるファイル:
+
+- `{EffectId}.cpm` × エフェクト数
+- `CSPBridgeEffects.dll`
+- `CSPBridgeEffects.runtimeconfig.json`
+
+---
+
+## 5. エフェクトの追加方法
+
+エフェクトは [`effects.json`](effects.json) を編集して追加します。
+
+```json
+{
+    "effects": [
+        { "id": "Blur" },
+        { "id": "Sharpen" },
+        { "id": "Mosaic" },
+        { "id": "MyNewEffect" }
+    ]
+}
+```
+
+`id` の命名規則:
+- **英数字とアンダースコアのみ**使用可（C# クラス名・C++ マクロ名として使われるため）
+- 先頭は英字
+
+追加後に再設定してビルドします。
+
+```powershell
+meson setup build --reconfigure
+meson compile -C build
+```
+
+meson が自動的に以下を行います。
+
+1. `effects.json` から `id` を読み取る（`jq` 使用）
+2. `EffectTemplate.cs.in` から `{id}.cs` を生成（`build/CSPBridgeEffects/` に出力）
+3. `{id}.cpm`（C++ ブリッジ DLL）をビルド
+4. `CSPBridgeEffects.dll` をビルド（生成された `.cs` ファイルを含む）
+
+---
+
+## 6. C# エフェクト実装ガイド
+
+### エフェクトクラスの自動生成
+
+エフェクトクラスは [`CSPBridgeEffects/Effects/EffectTemplate.cs.in`](CSPBridgeEffects/Effects/EffectTemplate.cs.in) をテンプレートとして meson が自動生成します。手動での編集は不要です。
+
+テンプレート内のプレースホルダ:
+
+| プレースホルダ | 置換後の値 | 例 |
+|---|---|---|
+| `@EFFECT_ID@` | effects.json の `id` | `Blur` |
+| `@MODULE_ID@` | `com.example.cspbridge.{id小文字}` | `com.example.cspbridge.blur` |
+
+### フィルタ処理の実装
+
+各エフェクトの `FilterRun` メソッドにピクセル処理を実装します。テンプレートの `FilterRun` は空のスケルトンなので、実際の処理は **別ファイル** に実装することを推奨します。
+
+```csharp
+// 例: Blur エフェクトの FilterRun（自動生成ファイル内）
+public static int FilterRun(TriglavPlugInServer* pluginServer, void** data)
+{
+    // BlurProcessor.Run(pluginServer) のように別クラスに委譲する
+    return BlurProcessor.Run(pluginServer);
+}
+```
+
+### 共通ヘルパー（EffectHelper）
+
+[`CSPBridgeEffects/Effects/EffectHelper.cs`](CSPBridgeEffects/Effects/EffectHelper.cs) に共通処理がまとまっています。
+
+| メソッド | 説明 |
+|---|---|
+| `InitializeModule(server, moduleId)` | ホストバージョン取得・モジュール ID・モジュール種別を設定 |
+| `InitializeFilter(server, category, name, targetKinds)` | カテゴリ名・フィルタ名・ターゲット種別を設定 |
+| `CreateAsciiString(service, text)` | ASCII 文字列の `TriglavPlugInStringObject` を作成 |
+
+### SDK バインディング
+
+`CSPBridgeEffects/Library/SDK/` 以下に TriglavPlugIn SDK の C# バインディングがあります。
+
+| ファイル | 内容 |
+|---|---|
+| `CSPBridgeEffectsLibType.cs` | 構造体定義（`TriglavPlugInServer` など） |
+| `CSPBridgeEffectsLibDefine.cs` | 定数定義（`kTriglavPlugIn...`） |
+| `CSPBridgeEffectsLibRecord.cs` | `TriglavPlugInRecordSuite` 構造体 |
+| `CSPBridgeEffectsLibService.cs` | `TriglavPlugInServiceSuite` 構造体 |
+| `CSPBridgeEffectsLibRecordFunction.cs` | レコード関数のラッパー |
+
+---
+
+## 7. 補足
+
+### MesonでJSONを扱う方法（jq使用）
+
+Meson 1.10 では `read_json` や `import('json')` が使えないため、`jq` を使って `effects.json` から値を取り出しています。
+
+`meson.build` での流れ:
+
+1. `find_program('jq')` で jq を検出
+2. `run_command()` で `jq -r ".effects[].id" effects.json` を実行
+3. 標準出力を改行で分割して `effect_ids` リストを作成
+4. `foreach effect_id : effect_ids` でターゲットを生成
+
+### runtimeconfig.json について
+
+C++ の `BridgeBase` は `hostfxr_initialize_for_runtime_config` で CoreCLR を初期化する際に `CSPBridgeEffects.runtimeconfig.json` を必要とします。
+
+C# プロジェクトの `<EnableDynamicLoading>true</EnableDynamicLoading>` を設定することで、クラスライブラリでも `runtimeconfig.json` が生成されます（デフォルトでは実行可能ファイルのみ生成）。
+
+### VSCode でのデバッグ
+
+1. `plugin_path` を設定してビルドし、CSP のプラグインフォルダにファイルをコピーします。
+2. CSP を起動してフィルタを適用し、動作を確認します。
+3. C# のデバッグは Visual Studio または VSCode の .NET デバッガを使用できます。

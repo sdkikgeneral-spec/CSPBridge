@@ -1,4 +1,8 @@
 # C# (CSPBridgeEffects) ビルド設定
+#
+# effects.json から読み込んだ effect_ids（親 meson.build で定義）をもとに、
+# EffectTemplate.cs.in からエフェクトごとの .cs ファイルを生成してから
+# dotnet build を実行します。
 
 dotnet = find_program('dotnet', required: true)
 
@@ -7,10 +11,30 @@ if get_option('buildtype') == 'debug' or get_option('buildtype') == 'debugoptimi
   cs_build_config = 'Debug'
 endif
 
-custom_target(
+# ---- テンプレートからエフェクト .cs ファイルを生成 ----
+# configure_file は meson setup 時に実行され、出力は meson ビルドディレクトリ以下に置かれる。
+# 出力先: <build_dir>/CSPBridgeEffects/<EffectId>.cs
+foreach effect_id : effect_ids
+  configure_file(
+    input:         'Effects/EffectTemplate.cs.in',
+    output:        effect_id + '.cs',
+    configuration: {
+      'EFFECT_ID': effect_id,
+      'MODULE_ID': 'com.example.cspbridge.' + effect_id.to_lower(),
+    },
+  )
+endforeach
+
+# 生成 .cs ファイルが置かれるディレクトリ（dotnet build へ渡す）
+generated_effects_dir = meson.current_build_dir() + '/'
+
+# ---- C# DLL をビルド ----
+# --property:GeneratedEffectsDir で生成ファイルのパスを .csproj に伝える。
+# 出力: CSPBridgeEffects.dll, CSPBridgeEffects.runtimeconfig.json
+cspbridgeeffects_cs_target = custom_target(
   'cspbridgeeffects_cs_build',
-  input: 'CSPBridgeEffects.csproj',
-  output: 'CSPBridgeEffects.dll',
+  input:  'CSPBridgeEffects.csproj',
+  output: ['CSPBridgeEffects.dll', 'CSPBridgeEffects.runtimeconfig.json'],
   command: [
     dotnet,
     'build',
@@ -18,7 +42,10 @@ custom_target(
     '-c', cs_build_config,
     '-nologo',
     '-o', '@OUTDIR@',
+    '--property:GeneratedEffectsDir=' + generated_effects_dir,
   ],
-  build_by_default: true,
+  build_by_default:   true,
   build_always_stale: true,
+  install:            true,
+  install_dir:        get_option('libdir'),
 )

@@ -2,6 +2,18 @@ using System.Runtime.InteropServices;
 
 namespace CSPBridgeEffects.Library.SDK;
 
+/// <summary>
+/// C++ の TriglavPlugInServer に対応するアンマネージド構造体です。
+/// C++ 側から TriglavPlugInServer* として渡されます。
+/// </summary>
+[StructLayout(LayoutKind.Sequential, Pack = 1)]
+public unsafe struct TriglavPlugInServer
+{
+	public TriglavPlugInRecordSuite  recordSuite;
+	public TriglavPlugInServiceSuite serviceSuite;
+	public TriglavPlugInHostObject   hostObject;
+}
+
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
 public struct TriglavPlugInPoint
 {

@@ -1,0 +1,5 @@
+option('plugin_path',
+  type: 'string',
+  value: '',
+  description: 'ビルド後にプラグインファイルをコピーするフォルダ（例: C:\\path\\to\\CLIP STUDIO PAINT\\plug-in）空の場合はコピーしない',
+)

@@ -1,4 +1,3 @@
-using System;
 using System.Runtime.InteropServices;
 
 namespace CSPBridgeEffects.Library.SDK;
@@ -221,6 +220,6 @@ public unsafe struct TriglavPlugInServiceSuite
 	public TriglavPlugInOffscreenService2* offscreenService2;
 	public TriglavPlugInPropertyService2* propertyService2;
 
-	[MarshalAs(UnmanagedType.ByValArray, SizeConst = 256 - 10)]
-	public IntPtr[] reserved;
+	// C++ 側 void*[256-10] と同サイズのパディング（64bit: 246 * 8 = 1968 バイト）
+	public fixed long _reserved[256 - 10];
 }

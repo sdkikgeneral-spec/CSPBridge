@@ -33,9 +33,11 @@ if host_machine.system() == 'windows'
     'CSPBridgeBase/pch.cpp',
   ]
 
+  cspbridge_libs = []
   foreach effect_id : effect_ids
-    
-    # 共通ブリッジ DLL の依存関係
+
+    # エフェクトIDごとにブリッジ DLL をビルドする
+    # C# DLL は実行時に CoreCLR 経由でロードするためリンク依存はない
     cspbridge_lib = shared_library(
         effect_id,
         cspbridge_sources,
@@ -50,8 +52,29 @@ if host_machine.system() == 'windows'
             '-DEFFECT_ID="' + effect_id + '"'
         ],
         name_suffix: 'cpm',
-        install: true)
+        install: true,
+        install_dir: get_option('libdir'))
+    cspbridge_libs += cspbridge_lib
   endforeach
+
+  # デバッグ用：plugin_path が指定されていればビルド成功後にファイルをコピー
+  plugin_path = get_option('plugin_path')
+  if plugin_path != ''
+    py3 = import('python').find_installation()
+    custom_target(
+      'copy_to_plugin_path',
+      input: cspbridge_libs + [cspbridgeeffects_cs_target[0], cspbridgeeffects_cs_target[1]],
+      output: 'copy_to_plugin_path.stamp',
+      command: [
+        py3,
+        project_dir / 'copy_to_plugin.py',
+        plugin_path,
+        '@OUTPUT@',
+        '@INPUT@',
+      ],
+      build_by_default: true,
+    )
+  endif
 
   # ヘッダーファイルのインストール
   install_headers(

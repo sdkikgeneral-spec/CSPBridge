@@ -1,0 +1,52 @@
+// このファイルは meson.build が effects.json をもとに自動生成します。
+// 手動で編集しないでください。元のテンプレートは EffectTemplate.cs.in です。
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using CSPBridgeEffects.Library.SDK;
+using static CSPBridgeEffects.Library.SDK.CSPBridgeEffectsLibDefine;
+using static CSPBridgeEffects.Library.SDK.CSPBridgeEffectsLibRecordFunction;
+
+namespace CSPBridgeEffects.Effects;
+
+/// <summary>
+/// @EFFECT_ID@ エフェクトの C++ ブリッジ エントリポイントを提供します。
+/// C++ 側は EFFECT_ID="@EFFECT_ID@" でこの型の各メソッドを
+/// load_assembly_and_get_function_pointer で取得します。
+/// </summary>
+public static unsafe class @EFFECT_ID@
+{
+    private static readonly int[] s_targetKinds =
+    [
+        kTriglavPlugInFilterTargetKindRasterLayerRGBAlpha,
+        kTriglavPlugInFilterTargetKindRasterLayerGrayAlpha,
+    ];
+
+    /// <summary>モジュール初期化：モジュール ID とモジュール種別を設定します。</summary>
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    public static int ModuleInitialize(TriglavPlugInServer* pluginServer)
+        => EffectHelper.InitializeModule(pluginServer, "@MODULE_ID@");
+
+    /// <summary>フィルタ初期化：カテゴリ名・フィルタ名・ターゲット種別を設定します。</summary>
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    public static int FilterInitialize(TriglavPlugInServer* pluginServer, void** data)
+        => EffectHelper.InitializeFilter(pluginServer, "Bridge Effects", "@EFFECT_ID@", s_targetKinds);
+
+    /// <summary>フィルタ実行：ピクセル処理を行います。</summary>
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    public static int FilterRun(TriglavPlugInServer* pluginServer, void** data)
+    {
+        var record = &pluginServer->recordSuite;
+        var host   = pluginServer->hostObject;
+
+        int processResult = kTriglavPlugInFilterRunProcessResultContinue;
+        TriglavPlugInFilterRunProcess(record, &processResult, host, kTriglavPlugInFilterRunProcessStateStart);
+        TriglavPlugInFilterRunProcess(record, &processResult, host, kTriglavPlugInFilterRunProcessStateEnd);
+
+        return kTriglavPlugInCallResultSuccess;
+    }
+
+    /// <summary>フィルタ終了：リソースを解放します。</summary>
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    public static int FilterTerminate(TriglavPlugInServer* pluginServer, void** data)
+        => kTriglavPlugInCallResultSuccess;
+}

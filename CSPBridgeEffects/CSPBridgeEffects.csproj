@@ -1,5 +1,17 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>enable</Nullable>
+    <!-- CoreCLR ホスティング用: runtimeconfig.json を生成する -->
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <!-- meson が effects.json の各エフェクト ID から生成した .cs ファイルのディレクトリ -->
+    <!-- meson.build から property:GeneratedEffectsDir=<path> で渡される -->
+    <GeneratedEffectsDir></GeneratedEffectsDir>
   </PropertyGroup>
+
+  <!-- meson ビルド時：生成された .cs ファイルをコンパイル対象に追加 -->
+  <ItemGroup Condition="'$(GeneratedEffectsDir)' != ''">
+    <Compile Include="$(GeneratedEffectsDir)*.cs" />
+  </ItemGroup>
 </Project>

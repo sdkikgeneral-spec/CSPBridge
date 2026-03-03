@@ -1,4 +1,3 @@
-using System;
 using System.Runtime.InteropServices;
 
 namespace CSPBridgeEffects.Library.SDK;
@@ -156,6 +155,6 @@ public unsafe struct TriglavPlugInRecordSuite
 	public TriglavPlugInFilterActivationInitializeRecord* filterActivationInitializeRecord;
 	public TriglavPlugInFilterActivationRunRecord* filterActivationRunRecord;
 
-	[MarshalAs(UnmanagedType.ByValArray, SizeConst = 256 - 24)]
-	public IntPtr[] reserved;
+	// C++ 側 void*[256-24] と同サイズのパディング（64bit: 232 * 8 = 1856 バイト）
+	public fixed long _reserved[256 - 24];
 }
