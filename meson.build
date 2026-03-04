@@ -4,6 +4,38 @@ project('CSPBridge', 'cpp', 'cs',
 
 # JSON を読み取る
 project_dir = meson.project_source_root()
+fs = import('fs')
+
+csp_filterplugin_dir = project_dir / 'CSP_FilterPlugIn'
+csp_filterplugin_sdk_dir = csp_filterplugin_dir / 'FilterPlugIn' / 'TriglavPlugInSDK'
+csp_filterplugin_sdk_rel = 'CSP_FilterPlugIn/FilterPlugIn/TriglavPlugInSDK'
+if not fs.is_dir(csp_filterplugin_dir)
+  message('CSP_FilterPlugIn が見つからないため、SDK ZIP を自動取得します。')
+
+  pwsh = find_program('pwsh', required: false)
+  if not pwsh.found()
+    pwsh = find_program('powershell', required: false)
+  endif
+  if not pwsh.found()
+    error('PowerShell (pwsh または powershell) が見つかりません。CSP_FilterPlugIn を手動配置するか、PowerShell をインストールしてください。')
+  endif
+
+  csp_filterplugin_zip_url = 'https://vd.clipstudio.net/clipcontent/paint/sdk/FilterPlugIn20210827.zip'
+  run_command(
+    pwsh,
+    '-NoProfile',
+    '-ExecutionPolicy', 'Bypass',
+    '-File', project_dir / 'ensure_csp_filterplugin.ps1',
+    '-ProjectDir', project_dir,
+    '-ZipUrl', csp_filterplugin_zip_url,
+    check: true
+  )
+endif
+
+if not fs.is_dir(csp_filterplugin_sdk_dir)
+  error('TriglavPlugIn SDK ヘッダが見つかりません: ' + csp_filterplugin_sdk_dir)
+endif
+
 jq = find_program('jq', required: false)
 if not jq.found()
   error('jq が見つかりません。Windows では `winget install jqlang.jq` を実行してから、meson setup build --reconfigure を再実行してください。')
@@ -43,7 +75,7 @@ if host_machine.system() == 'windows'
         cspbridge_sources,
         include_directories: [
             'CSPBridgeBase',
-            './CSP_FilterPlugIn/FilterPlugIn/TriglavPlugInSDK'
+            csp_filterplugin_sdk_rel,
         ],
         cpp_args: [
             '/D_WINDOWS',

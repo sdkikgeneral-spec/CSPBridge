@@ -27,6 +27,7 @@ CSPBridge/
 ├── meson_options.txt         # Build options (e.g., plugin_path)
 ├── effects.json              # Effect ID list
 ├── copy_to_plugin.py         # Post-build copy script (called by meson)
+├── ensure_csp_filterplugin.ps1  # SDK auto-download script (called by meson)
 ├── inst.ps1                  # Dependency installation script
 │
 ├── CSPBridgeBase/            # Shared C++ bridge implementation
@@ -44,7 +45,7 @@ CSPBridge/
 │   └── Library/
 │       └── SDK/              # C# bindings for TriglavPlugIn SDK
 │
-└── CSP_FilterPlugIn/
+└── CSP_FilterPlugIn/             # TriglavPlugIn SDK (auto-fetched on first meson setup)
     └── FilterPlugIn/
         └── TriglavPlugInSDK/ # TriglavPlugIn SDK headers (C++)
 ```
@@ -61,6 +62,9 @@ CSPBridge/
 | Meson | 1.1 or later | `winget install mesonbuild.meson` |
 | Ninja | (bundled with Meson) | Installed automatically with Meson |
 | jq | 1.6 or later | `winget install jqlang.jq` |
+
+> **TriglavPlugIn SDK**
+> If the `CSP_FilterPlugIn/` folder is missing, `meson setup` automatically runs `ensure_csp_filterplugin.ps1` to download and extract the SDK ZIP. No manual setup is needed.
 
 ### Install all at once (`inst.ps1`)
 

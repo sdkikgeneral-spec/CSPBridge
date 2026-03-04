@@ -29,6 +29,7 @@ CSPBridge/
 ├── meson_options.txt         # ビルドオプション（plugin_path など）
 ├── effects.json              # エフェクト ID 一覧
 ├── copy_to_plugin.py         # ビルド後コピースクリプト（meson が呼び出す）
+├── ensure_csp_filterplugin.ps1  # SDK 自動ダウンロードスクリプト（meson が呼び出す）
 ├── inst.ps1                  # 依存ツールインストールスクリプト
 │
 ├── CSPBridgeBase/            # C++ ブリッジ共通実装
@@ -46,7 +47,7 @@ CSPBridge/
 │   └── Library/
 │       └── SDK/              # TriglavPlugIn SDK の C# バインディング
 │
-└── CSP_FilterPlugIn/
+└── CSP_FilterPlugIn/             # TriglavPlugIn SDK（初回 meson setup 時に自動取得）
     └── FilterPlugIn/
         └── TriglavPlugInSDK/ # TriglavPlugIn SDK ヘッダ（C++）
 ```
@@ -63,6 +64,9 @@ CSPBridge/
 | Meson | 1.1 以降 | `winget install mesonbuild.meson` |
 | Ninja | （Meson に同梱） | Meson インストール時に自動 |
 | jq | 1.6 以降 | `winget install jqlang.jq` |
+
+> **TriglavPlugIn SDK について**
+> `CSP_FilterPlugIn/` フォルダが存在しない場合、`meson setup` 実行時に `ensure_csp_filterplugin.ps1` が自動的に SDK ZIP をダウンロード・展開します。手動配置は不要です。
 
 ### まとめてインストール（inst.ps1）
 
