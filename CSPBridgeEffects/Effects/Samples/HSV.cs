@@ -2,6 +2,7 @@
 // CSP_FilterPlugIn/FilterPlugIn/Source/HSV/PIHSVMain.cpp を C# に移植したものです。
 // EffectTemplate.cs.in と同じ 4 エントリポイント構造で実装しています。
 using System;
+using System.Buffers;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using CSPBridgeEffects.Library.SDK;
@@ -158,7 +159,9 @@ public static unsafe class HSV
         // ブロック矩形リストを構築
         int blockCount;
         offscreenSvc->getBlockRectCountProc(&blockCount, dstOffscreen, &selectRect);
-        var blockRects = new TriglavPlugInRect[blockCount];
+        var blockRects = ArrayPool<TriglavPlugInRect>.Shared.Rent(blockCount);
+        try
+        {
         for (int i = 0; i < blockCount; i++)
             offscreenSvc->getBlockRectProc(&blockRects[i], i, dstOffscreen, &selectRect);
 
@@ -225,6 +228,11 @@ public static unsafe class HSV
                 if      (procResult == kTriglavPlugInFilterRunProcessResultRestart) restart = true;
                 else if (procResult == kTriglavPlugInFilterRunProcessResultExit)    break;
             }
+        }
+        }
+        finally
+        {
+            ArrayPool<TriglavPlugInRect>.Shared.Return(blockRects);
         }
 
         return kTriglavPlugInCallResultSuccess;
@@ -330,6 +338,7 @@ public static unsafe class HSV
     // HSV 数学処理（PIHSVFilter.h の C# 移植）
     // ================================================================
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void ApplyHsv(byte* pixel, int r, int g, int b,
         int hFilter, int sFilter, int vFilter)
     {
@@ -341,6 +350,7 @@ public static unsafe class HSV
         pixel[b] = (byte)uB;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void ApplyHsvMask(byte* pixel, int r, int g, int b, byte mask,
         int hFilter, int sFilter, int vFilter)
     {
@@ -352,6 +362,7 @@ public static unsafe class HSV
         pixel[b] = (byte)Blend8((int)uB, pixel[b], mask);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int Blend8(int dst, int src, int mask)
         => ((dst - src) * mask / 255) + src;
 
@@ -359,6 +370,7 @@ public static unsafe class HSV
     /// RGB (各 0〜255) を HSV に変換します。
     /// H: 0〜6*32768, S: 0〜65536, V: 0〜255
     /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void RgbToHsv(out uint ruH, out uint ruS, out uint ruV,
         uint r, uint g, uint b)
     {
@@ -406,6 +418,7 @@ public static unsafe class HSV
         ruV = uMax;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int GetH(uint c1, uint c2, uint d)
         => c1 >= c2
             ?  (int)((c1 - c2) << 15) / (int)d
@@ -414,29 +427,34 @@ public static unsafe class HSV
     /// <summary>
     /// HSV (H: 0〜6*32768, S: 0〜65536, V: 0〜255) を RGB に変換します。
     /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void HsvToRgb(out uint ruR, out uint ruG, out uint ruB,
         uint h, uint s, uint v)
     {
         uint f = h & 32767u;
         switch (h >> 15)
         {
-            case 0:  ruR = v;            ruG = GetP3(v,s,f); ruB = GetP1(v,s,f); break;
-            case 1:  ruR = GetP2(v,s,f); ruG = v;            ruB = GetP1(v,s,f); break;
-            case 2:  ruR = GetP1(v,s,f); ruG = v;            ruB = GetP3(v,s,f); break;
-            case 3:  ruR = GetP1(v,s,f); ruG = GetP2(v,s,f); ruB = v;            break;
-            case 4:  ruR = GetP3(v,s,f); ruG = GetP1(v,s,f); ruB = v;            break;
-            default: ruR = v;            ruG = GetP1(v,s,f); ruB = GetP2(v,s,f); break;
+            case 0:  ruR = v;            ruG = GetP3(v,s,f); ruB = GetP1(v,s); break;
+            case 1:  ruR = GetP2(v,s,f); ruG = v;            ruB = GetP1(v,s); break;
+            case 2:  ruR = GetP1(v,s);   ruG = v;            ruB = GetP3(v,s,f); break;
+            case 3:  ruR = GetP1(v,s);   ruG = GetP2(v,s,f); ruB = v;            break;
+            case 4:  ruR = GetP3(v,s,f); ruG = GetP1(v,s);   ruB = v;            break;
+            default: ruR = v;            ruG = GetP1(v,s);   ruB = GetP2(v,s,f); break;
         }
     }
 
-    private static uint GetP1(uint v, uint s, uint f) => (v * (65536u - s)) >> 16;
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static uint GetP1(uint v, uint s) => (v * (65536u - s)) >> 16;
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint GetP2(uint v, uint s, uint f) => (v * (65536u - ((s * f) >> 15))) >> 16;
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint GetP3(uint v, uint s, uint f) => (v * (65536u - ((s * (32768u - f)) >> 15))) >> 16;
 
     /// <summary>
     /// HSV フィルタ調整値を H/S/V に適用します（PIHSVFilter::HSVFilter の移植）。
     /// hFilter: 0〜6*32768, sFilter/vFilter: -32768〜32768
     /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void HsvFilter(ref uint ruH, ref uint ruS, ref uint ruV,
         int hFilter, int sFilter, int vFilter)
     {
