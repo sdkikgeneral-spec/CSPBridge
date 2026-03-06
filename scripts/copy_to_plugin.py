@@ -11,7 +11,11 @@ src_files = sys.argv[3:]
 
 dst_dir.mkdir(parents=True, exist_ok=True)
 for src in src_files:
-    shutil.copy2(src, dst_dir)
-    print(f'Copied: {pathlib.Path(src).name} -> {dst_dir}')
+    src_path = pathlib.Path(src)
+    try:
+        shutil.copy(src_path, dst_dir)
+        print(f'Copied: {src_path.name} -> {dst_dir}')
+    except PermissionError as ex:
+        print(f'Warning: skip copy (locked): {src_path.name} -> {dst_dir} ({ex})')
 
 stamp_file.write_text('done\n', encoding='utf-8')

@@ -66,6 +66,7 @@ private:
     // ---- hostfxr ----
     HMODULE            m_hHostfxrLib;
     void*              m_pHostContext;
+    bool               m_isPrimaryHost;  // true when we created the CLR primary context (rc=0)
     hostfxr_close_fn   m_pfnHostfxrClose;
     load_assembly_fn   m_pfnLoadAssembly;
 

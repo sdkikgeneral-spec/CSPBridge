@@ -21,14 +21,17 @@ By calling C# code from a C++ plug-in entry point via CoreCLR, you can build CSP
 
 ## 1. Project Structure
 
-```
+```text
 CSPBridge/
 ├── meson.build               # Root build definition
 ├── meson_options.txt         # Build options (e.g., plugin_path)
 ├── effects.json              # Effect ID list
-├── copy_to_plugin.py         # Post-build copy script (called by meson)
-├── ensure_csp_filterplugin.ps1  # SDK auto-download script (called by meson)
 ├── inst.ps1                  # Dependency installation script
+│
+├── scripts/                  # Build helper scripts (called by meson)
+│   ├── ensure_csp_filterplugin.ps1  # SDK auto-download script
+│   ├── copy_to_plugin.py            # Post-build copy script
+│   └── make_release_zip.py          # Release ZIP creation script
 │
 ├── CSPBridgeBase/            # Shared C++ bridge implementation
 │   ├── BridgeBase.cpp/h      # CoreCLR hosting and function pointer management
@@ -41,7 +44,9 @@ CSPBridge/
 │   ├── meson.build
 │   ├── Effects/
 │   │   ├── EffectTemplate.cs.in   # Template for effect classes
-│   │   └── EffectHelper.cs        # Module/filter initialization helpers
+│   │   ├── EffectHelper.cs        # Module/filter initialization helpers
+│   │   └── Samples/               # Sample effect implementations
+│   │       └── HSV.cs             # HSV adjustment sample
 │   └── Library/
 │       └── SDK/              # C# bindings for TriglavPlugIn SDK
 │
@@ -55,7 +60,7 @@ CSPBridge/
 ## 2. Prerequisites
 
 | Tool | Version | How to get it |
-|---|---|---|
+| --- | --- | --- |
 | Windows | 10 / 11 (x64) | — |
 | Visual Studio | 2022 or later (C++ build tools) | [visualstudio.microsoft.com](https://visualstudio.microsoft.com/) |
 | .NET SDK | 10.0 or later | [dot.net](https://dotnet.microsoft.com/) |
@@ -107,14 +112,17 @@ meson compile -C build
 If the build succeeds, the following files are generated:
 
 | File | Description |
-|---|---|
+| --- | --- |
 | `build/Blur.cpm` | C++ bridge DLL for Blur effect |
 | `build/Sharpen.cpm` | C++ bridge DLL for Sharpen effect |
 | `build/Mosaic.cpm` | C++ bridge DLL for Mosaic effect |
+| `build/HSV.cpm` | C++ bridge DLL for HSV effect |
 | `build/CSPBridgeEffects/CSPBridgeEffects.dll` | C# effect library |
 | `build/CSPBridgeEffects/CSPBridgeEffects.runtimeconfig.json` | Runtime config required for CoreCLR initialization |
+| `build/CSPBridgeEffects/CSPBridgeEffects.deps.json` | Assembly dependency information |
+| `build/CSPBridge-v1.0.0.zip` | Release ZIP bundling all output files for distribution |
 
-If `plugin_path` is set, these 5 files are copied automatically to the specified folder after build.
+If `plugin_path` is set, the `.cpm` / `.dll` / `.runtimeconfig.json` / `.deps.json` files are copied automatically to the specified folder after build.
 
 ### 3.3 Reconfigure (when options change)
 
@@ -140,7 +148,7 @@ Build-time options are defined in [`meson_options.txt`](../meson_options.txt).
 
 Specifies the folder to automatically copy plug-in files after a successful build.
 
-```
+```meson
 option('plugin_path',
   type: 'string',
   value: '',
@@ -149,7 +157,7 @@ option('plugin_path',
 ```
 
 | Example | Command |
-|---|---|
+| --- | --- |
 | Not set (no copy) | `meson setup build` |
 | Set destination | `meson setup build -Dplugin_path="C:\path\to\plug-in"` |
 | Change destination | `meson setup build --reconfigure -Dplugin_path="new/path"` |
@@ -159,6 +167,7 @@ Copied files:
 - `{EffectId}.cpm` × number of effects
 - `CSPBridgeEffects.dll`
 - `CSPBridgeEffects.runtimeconfig.json`
+- `CSPBridgeEffects.deps.json`
 
 ---
 
@@ -166,18 +175,37 @@ Copied files:
 
 Add effects by editing [`effects.json`](../effects.json).
 
+### Template-generated effects (standard)
+
 ```json
 {
     "effects": [
         { "id": "Blur" },
-        { "id": "Sharpen" },
-        { "id": "Mosaic" },
         { "id": "MyNewEffect" }
     ]
 }
 ```
 
+### Custom effects with hand-written `.cs`
+
+Adding `"custom": true` skips auto-generation from `EffectTemplate.cs.in`.
+Instead, provide a hand-written `.cs` file for the effect.
+
+> **Namespace requirement**
+> `BridgeBase` resolves the type at runtime as `CSPBridgeEffects.Effects.{id}`.
+> The class in your custom `.cs` file must declare `namespace CSPBridgeEffects.Effects;`.
+> (The file may live in a subdirectory — only the namespace matters. `Samples/HSV.cs` is the reference example.)
+
+```json
+{
+    "effects": [
+        { "id": "HSV", "custom": true }
+    ]
+}
+```
+
 `id` naming rules:
+
 - Use **only alphanumeric characters and underscores** (used for C# class names and C++ macros)
 - Must start with a letter
 
@@ -191,7 +219,7 @@ meson compile -C build
 Meson automatically does the following:
 
 1. Reads `id` values from `effects.json` (using `jq`)
-2. Generates `{id}.cs` from `EffectTemplate.cs.in` (output to `build/CSPBridgeEffects/`)
+2. Generates `{id}.cs` from `EffectTemplate.cs.in` for effects without `"custom": true` (output to `build/CSPBridgeEffects/`)
 3. Builds `{id}.cpm` (C++ bridge DLL)
 4. Builds `CSPBridgeEffects.dll` (including generated `.cs` files)
 
@@ -206,13 +234,13 @@ Effect classes are auto-generated by meson using [`CSPBridgeEffects/Effects/Effe
 Placeholders in the template:
 
 | Placeholder | Replaced with | Example |
-|---|---|---|
+| --- | --- | --- |
 | `@EFFECT_ID@` | `id` in effects.json | `Blur` |
 | `@MODULE_ID@` | `com.example.cspbridge.{lowercase id}` | `com.example.cspbridge.blur` |
 
 ### Implementing filter processing
 
-Implement pixel processing in each effect’s `FilterRun` method. Since `FilterRun` in the template is an empty skeleton, implementing the actual processing in a **separate file** is recommended.
+Implement pixel processing in each effect's `FilterRun` method. Since `FilterRun` in the template is an empty skeleton, implementing the actual processing in a **separate file** is recommended.
 
 ```csharp
 // Example: Blur effect FilterRun (inside auto-generated file)
@@ -228,7 +256,7 @@ public static int FilterRun(TriglavPlugInServer* pluginServer, void** data)
 Common logic is centralized in [`CSPBridgeEffects/Effects/EffectHelper.cs`](../CSPBridgeEffects/Effects/EffectHelper.cs).
 
 | Method | Description |
-|---|---|
+| --- | --- |
 | `InitializeModule(server, moduleId)` | Sets host version, module ID, and module type |
 | `InitializeFilter(server, category, name, targetKinds)` | Sets category name, filter name, and target kinds |
 | `CreateAsciiString(service, text)` | Creates an ASCII `TriglavPlugInStringObject` |
@@ -238,7 +266,7 @@ Common logic is centralized in [`CSPBridgeEffects/Effects/EffectHelper.cs`](../C
 C# bindings for TriglavPlugIn SDK are under `CSPBridgeEffects/Library/SDK/`.
 
 | File | Content |
-|---|---|
+| --- | --- |
 | `CSPBridgeEffectsLibType.cs` | Struct definitions (`TriglavPlugInServer`, etc.) |
 | `CSPBridgeEffectsLibDefine.cs` | Constant definitions (`kTriglavPlugIn...`) |
 | `CSPBridgeEffectsLibRecord.cs` | `TriglavPlugInRecordSuite` struct |

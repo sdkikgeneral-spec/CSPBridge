@@ -28,9 +28,12 @@ CSPBridge/
 ├── meson.build               # ルートビルド定義
 ├── meson_options.txt         # ビルドオプション（plugin_path など）
 ├── effects.json              # エフェクト ID 一覧
-├── copy_to_plugin.py         # ビルド後コピースクリプト（meson が呼び出す）
-├── ensure_csp_filterplugin.ps1  # SDK 自動ダウンロードスクリプト（meson が呼び出す）
 ├── inst.ps1                  # 依存ツールインストールスクリプト
+│
+├── scripts/                  # ビルド補助スクリプト（meson が呼び出す）
+│   ├── ensure_csp_filterplugin.ps1  # SDK 自動ダウンロードスクリプト
+│   ├── copy_to_plugin.py            # ビルド後コピースクリプト
+│   └── make_release_zip.py          # リリース ZIP 作成スクリプト
 │
 ├── CSPBridgeBase/            # C++ ブリッジ共通実装
 │   ├── BridgeBase.cpp/h      # CoreCLR ホスティング・関数ポインタ管理
@@ -43,7 +46,9 @@ CSPBridge/
 │   ├── meson.build
 │   ├── Effects/
 │   │   ├── EffectTemplate.cs.in   # エフェクトクラスのテンプレート
-│   │   └── EffectHelper.cs        # モジュール・フィルタ初期化ヘルパー
+│   │   ├── EffectHelper.cs        # モジュール・フィルタ初期化ヘルパー
+│   │   └── Samples/               # サンプルエフェクト実装
+│   │       └── HSV.cs             # HSV 調整サンプル
 │   └── Library/
 │       └── SDK/              # TriglavPlugIn SDK の C# バインディング
 │
@@ -113,10 +118,13 @@ meson compile -C build
 | `build/Blur.cpm` | Blur エフェクト用 C++ ブリッジ DLL |
 | `build/Sharpen.cpm` | Sharpen エフェクト用 C++ ブリッジ DLL |
 | `build/Mosaic.cpm` | Mosaic エフェクト用 C++ ブリッジ DLL |
+| `build/HSV.cpm` | HSV エフェクト用 C++ ブリッジ DLL |
 | `build/CSPBridgeEffects/CSPBridgeEffects.dll` | C# エフェクトライブラリ |
 | `build/CSPBridgeEffects/CSPBridgeEffects.runtimeconfig.json` | CoreCLR 初期化に必要なランタイム設定 |
+| `build/CSPBridgeEffects/CSPBridgeEffects.deps.json` | アセンブリ依存関係情報 |
+| `build/CSPBridge-v1.0.0.zip` | 配布用リリース ZIP（全出力ファイルをまとめたもの） |
 
-`plugin_path` を指定している場合は、ビルド完了後にこれら 5 ファイルが自動的に指定フォルダへコピーされます。
+`plugin_path` を指定している場合は、ビルド完了後に `.cpm` / `.dll` / `.runtimeconfig.json` / `.deps.json` が自動的に指定フォルダへコピーされます。
 
 ### 3.3 再設定（オプション変更時）
 
@@ -161,6 +169,7 @@ option('plugin_path',
 - `{EffectId}.cpm` × エフェクト数
 - `CSPBridgeEffects.dll`
 - `CSPBridgeEffects.runtimeconfig.json`
+- `CSPBridgeEffects.deps.json`
 
 ---
 
@@ -168,13 +177,31 @@ option('plugin_path',
 
 エフェクトは [`effects.json`](effects.json) を編集して追加します。
 
+### テンプレートから自動生成する場合（標準）
+
 ```json
 {
     "effects": [
         { "id": "Blur" },
-        { "id": "Sharpen" },
-        { "id": "Mosaic" },
         { "id": "MyNewEffect" }
+    ]
+}
+```
+
+### 手書き `.cs` を持つカスタムエフェクトの場合
+
+`"custom": true` を付けると、`EffectTemplate.cs.in` からの自動生成をスキップします。
+代わりに手書きの `.cs` ファイルを用意してください。
+
+> **namespace の制約**
+> `BridgeBase` は実行時に `CSPBridgeEffects.Effects.{id}` という型名でクラスを検索します。
+> カスタム `.cs` ファイルのクラスは必ず `namespace CSPBridgeEffects.Effects;` を宣言してください。
+> （サブディレクトリに置いても namespace だけ合わせれば問題ありません。`Samples/HSV.cs` が実例です）
+
+```json
+{
+    "effects": [
+        { "id": "HSV", "custom": true }
     ]
 }
 ```
@@ -193,7 +220,7 @@ meson compile -C build
 meson が自動的に以下を行います。
 
 1. `effects.json` から `id` を読み取る（`jq` 使用）
-2. `EffectTemplate.cs.in` から `{id}.cs` を生成（`build/CSPBridgeEffects/` に出力）
+2. `"custom": true` でないエフェクトは `EffectTemplate.cs.in` から `{id}.cs` を生成（`build/CSPBridgeEffects/` に出力）
 3. `{id}.cpm`（C++ ブリッジ DLL）をビルド
 4. `CSPBridgeEffects.dll` をビルド（生成された `.cs` ファイルを含む）
 

@@ -25,7 +25,7 @@ if not fs.is_dir(csp_filterplugin_dir)
     pwsh,
     '-NoProfile',
     '-ExecutionPolicy', 'Bypass',
-    '-File', project_dir / 'ensure_csp_filterplugin.ps1',
+    '-File', project_dir / 'scripts' / 'ensure_csp_filterplugin.ps1',
     '-ProjectDir', project_dir,
     '-ZipUrl', csp_filterplugin_zip_url,
     check: true
@@ -65,6 +65,8 @@ if host_machine.system() == 'windows'
     'CSPBridgeBase/pch.cpp',
   ]
 
+  py3 = import('python').find_installation()
+
   cspbridge_libs = []
   foreach effect_id : effect_ids
 
@@ -89,17 +91,36 @@ if host_machine.system() == 'windows'
     cspbridge_libs += cspbridge_lib
   endforeach
 
+  # ---- リリース ZIP 作成 ----
+  zip_inputs = cspbridge_libs + [
+    cspbridgeeffects_cs_target[0],  # CSPBridgeEffects.dll
+    cspbridgeeffects_cs_target[1],  # CSPBridgeEffects.runtimeconfig.json
+    cspbridgeeffects_cs_target[2],  # CSPBridgeEffects.deps.json
+  ]
+  custom_target(
+    'release_zip',
+    input:   zip_inputs,
+    output:  ['CSPBridge-v' + meson.project_version() + '.zip', 'release_zip.stamp'],
+    command: [
+      py3,
+      project_dir / 'scripts' / 'make_release_zip.py',
+      '@OUTPUT0@',
+      '@OUTPUT1@',
+      '@INPUT@',
+    ],
+    build_by_default: true,
+  )
+
   # デバッグ用：plugin_path が指定されていればビルド成功後にファイルをコピー
   plugin_path = get_option('plugin_path')
   if plugin_path != ''
-    py3 = import('python').find_installation()
     custom_target(
       'copy_to_plugin_path',
-      input: cspbridge_libs + [cspbridgeeffects_cs_target[0], cspbridgeeffects_cs_target[1]],
+      input: cspbridge_libs + [cspbridgeeffects_cs_target[0], cspbridgeeffects_cs_target[1], cspbridgeeffects_cs_target[2]],
       output: 'copy_to_plugin_path.stamp',
       command: [
         py3,
-        project_dir / 'copy_to_plugin.py',
+        project_dir / 'scripts' / 'copy_to_plugin.py',
         plugin_path,
         '@OUTPUT@',
         '@INPUT@',

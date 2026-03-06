@@ -2,6 +2,7 @@
     "effects": [
         { "id": "Blur" },
         { "id": "Sharpen" },
-        { "id": "Mosaic" }
+        { "id": "Mosaic" },
+        { "id": "HSV", "custom": true }
     ]
 }

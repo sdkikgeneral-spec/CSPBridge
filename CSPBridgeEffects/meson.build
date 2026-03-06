@@ -11,18 +11,36 @@ if get_option('buildtype') == 'debug' or get_option('buildtype') == 'debugoptimi
   cs_build_config = 'Debug'
 endif
 
+# ---- カスタム実装を持つエフェクト ID を取得 (テンプレート生成をスキップ) ----
+# effects.json の { "custom": true } フラグで識別する。
+custom_ids_result = run_command(
+  jq,
+  '-r',
+  '.effects[] | select(.custom == true) | .id',
+  project_dir / 'effects.json',
+  check: true
+)
+custom_ids_raw = custom_ids_result.stdout().strip()
+custom_ids = []
+if custom_ids_raw != ''
+  custom_ids = custom_ids_raw.split('\n')
+endif
+
 # ---- テンプレートからエフェクト .cs ファイルを生成 ----
 # configure_file は meson setup 時に実行され、出力は meson ビルドディレクトリ以下に置かれる。
 # 出力先: <build_dir>/CSPBridgeEffects/<EffectId>.cs
+# custom_ids に含まれるエフェクトは手書き .cs を持つため生成をスキップする。
 foreach effect_id : effect_ids
-  configure_file(
-    input:         'Effects/EffectTemplate.cs.in',
-    output:        effect_id + '.cs',
-    configuration: {
-      'EFFECT_ID': effect_id,
-      'MODULE_ID': 'com.example.cspbridge.' + effect_id.to_lower(),
-    },
-  )
+  if effect_id not in custom_ids
+    configure_file(
+      input:         'Effects/EffectTemplate.cs.in',
+      output:        effect_id + '.cs',
+      configuration: {
+        'EFFECT_ID': effect_id,
+        'MODULE_ID': 'com.example.cspbridge.' + effect_id.to_lower(),
+      },
+    )
+  endif
 endforeach
 
 # 生成 .cs ファイルが置かれるディレクトリ（dotnet build へ渡す）
@@ -34,7 +52,7 @@ generated_effects_dir = meson.current_build_dir() + '/'
 cspbridgeeffects_cs_target = custom_target(
   'cspbridgeeffects_cs_build',
   input:  'CSPBridgeEffects.csproj',
-  output: ['CSPBridgeEffects.dll', 'CSPBridgeEffects.runtimeconfig.json'],
+  output: ['CSPBridgeEffects.dll', 'CSPBridgeEffects.runtimeconfig.json', 'CSPBridgeEffects.deps.json'],
   command: [
     dotnet,
     'build',
