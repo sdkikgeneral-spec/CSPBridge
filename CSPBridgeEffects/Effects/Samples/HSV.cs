@@ -9,7 +9,7 @@ using CSPBridgeEffects.Library.SDK;
 using static CSPBridgeEffects.Library.SDK.CSPBridgeEffectsLibDefine;
 using static CSPBridgeEffects.Library.SDK.CSPBridgeEffectsLibRecordFunction;
 
-namespace CSPBridgeEffects.Effects.Samples;
+namespace CSPBridgeEffects.Effects;
 
 /// <summary>
 /// HSV フィルタのサンプル実装。
@@ -30,14 +30,6 @@ public static unsafe class HSV
     private const int HsvHFilterMax = 6 * 32768;
     private const int HsvSFilterMax = 32768;
     private const int HsvVFilterMax = 32768;
-
-    // FilterInitialize / FilterRun / プロパティコールバックで共有する状態
-    private sealed class HsvState
-    {
-        public int Hue;
-        public int Saturation;
-        public int Value;
-    }
 
     // ================================================================
     // プラグインエントリポイント
@@ -107,7 +99,8 @@ public static unsafe class HSV
         service->stringService->releaseProc(valLabel);
 
         // 状態オブジェクトを GCHandle で保持し void** data に格納
-        var handle = GCHandle.Alloc(new HsvState());
+        // 現状は managed 側の状態保持が不要だが、ライフサイクル対称性のためハンドルは維持する。
+        var handle = GCHandle.Alloc(new object());
         *data = (void*)GCHandle.ToIntPtr(handle);
 
         // プロパティとコールバックをホストに登録
@@ -124,7 +117,7 @@ public static unsafe class HSV
     {
         if (data != null && *data != null)
         {
-            GCHandle.FromIntPtr((nint)*data).Free();
+            GCHandle.FromIntPtr((IntPtr)(*data)).Free();
             *data = null;
         }
         return kTriglavPlugInCallResultSuccess;
@@ -162,8 +155,11 @@ public static unsafe class HSV
         var blockRects = ArrayPool<TriglavPlugInRect>.Shared.Rent(blockCount);
         try
         {
-        for (int i = 0; i < blockCount; i++)
-            offscreenSvc->getBlockRectProc(&blockRects[i], i, dstOffscreen, &selectRect);
+        fixed (TriglavPlugInRect* pBlockRects = blockRects)
+        {
+            for (int i = 0; i < blockCount; i++)
+                offscreenSvc->getBlockRectProc(pBlockRects + i, i, dstOffscreen, &selectRect);
+        }
 
         TriglavPlugInFilterRunSetProgressTotal(record, host, blockCount);
 
@@ -201,8 +197,7 @@ public static unsafe class HSV
                 {
                     // 全パラメータ 0: 処理不要、選択範囲全体をそのまま更新
                     blockIndex = blockCount;
-                    fixed (TriglavPlugInRect* pRect = &selectRect)
-                        TriglavPlugInFilterRunUpdateDestinationOffscreenRect(record, host, pRect);
+                    TriglavPlugInFilterRunUpdateDestinationOffscreenRect(record, host, &selectRect);
                 }
             }
 
@@ -212,8 +207,11 @@ public static unsafe class HSV
                 ProcessBlock(offscreenSvc, dstOffscreen, selectOffscreen,
                              ref blockRects[blockIndex],
                              rIdx, gIdx, bIdx, hFilter, sFilter, vFilter);
-                fixed (TriglavPlugInRect* pRect = &blockRects[blockIndex])
+                fixed (TriglavPlugInRect* pBlockRects = blockRects)
+                {
+                    TriglavPlugInRect* pRect = pBlockRects + blockIndex;
                     TriglavPlugInFilterRunUpdateDestinationOffscreenRect(record, host, pRect);
+                }
                 blockIndex++;
             }
 
