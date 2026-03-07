@@ -28,9 +28,39 @@ endif
 
 # ---- テンプレートからエフェクト .cs ファイルを生成 ----
 # configure_file は meson setup 時に実行され、出力は meson ビルドディレクトリ以下に置かれる。
-# 出力先: <build_dir>/CSPBridgeEffects/<EffectId>.cs
-# custom_ids に含まれるエフェクトは手書き .cs を持つため生成をスキップする。
+# 出力先: <build_dir>/CSPBridgeEffects/<EffectId>.cs / <EffectId>Meta.cs
+# custom_ids に含まれるエフェクトは手書き .cs を持つため本体生成をスキップするが、
+# メタデータクラス ({Id}Meta.cs) は全エフェクト共通で生成する。
 foreach effect_id : effect_ids
+  # effects.json から category を取得（省略時は "Bridge Effects"）
+  cat_result = run_command(
+    jq, '-r',
+    '.effects[] | select(.id == "' + effect_id + '") | .category // "Bridge Effects"',
+    project_dir / 'effects.json',
+    check: true,
+  )
+  category = cat_result.stdout().strip()
+
+  # effects.json から filterName を取得（省略時はエフェクト ID）
+  fname_result = run_command(
+    jq, '-r',
+    '.effects[] | select(.id == "' + effect_id + '") | .filterName // "' + effect_id + '"',
+    project_dir / 'effects.json',
+    check: true,
+  )
+  filter_name = fname_result.stdout().strip()
+
+  # メタデータクラスを全エフェクトに対して生成（カスタム実装側から参照される）
+  configure_file(
+    input:         'Effects/EffectMeta.cs.in',
+    output:        effect_id + 'Meta.cs',
+    configuration: {
+      'EFFECT_ID':   effect_id,
+      'CATEGORY':    category,
+      'FILTER_NAME': filter_name,
+    },
+  )
+
   if effect_id not in custom_ids
     configure_file(
       input:         'Effects/EffectTemplate.cs.in',

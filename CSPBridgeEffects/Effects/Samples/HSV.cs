@@ -47,7 +47,7 @@ public static unsafe class HSV
     {
         // カテゴリ名・フィルタ名・プレビュー可・ターゲット（RGB のみ）を設定
         int[] targets = [kTriglavPlugInFilterTargetKindRasterLayerRGBAlpha];
-        int rc = EffectHelper.InitializeFilter(pluginServer, "Bridge Effects", "HSV", targets);
+        int rc = EffectHelper.InitializeFilter(pluginServer, HSVMeta.Category, HSVMeta.FilterName, targets);
         if (rc != kTriglavPlugInCallResultSuccess)
             return rc;
 

@@ -1,8 +1,8 @@
 {
     "effects": [
-        { "id": "Blur",    "custom": true },
-        { "id": "Sharpen", "custom": true },
-        { "id": "Mosaic",  "custom": true },
-        { "id": "HSV", "custom": true }
+        { "id": "Blur",    "custom": true, "category": "Bridge Effects", "filterName": "Blur" },
+        { "id": "Sharpen", "custom": true, "category": "Bridge Effects", "filterName": "Sharpen" },
+        { "id": "Mosaic",  "custom": true, "category": "Bridge Effects", "filterName": "Mosaic" },
+        { "id": "HSV",     "custom": true, "category": "Bridge Effects", "filterName": "HSV" }
     ]
 }

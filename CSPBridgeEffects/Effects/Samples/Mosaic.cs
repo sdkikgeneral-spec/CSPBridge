@@ -35,7 +35,7 @@ public static unsafe class Mosaic
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static int FilterInitialize(TriglavPlugInServer* pluginServer, void** data)
     {
-        int rc = EffectHelper.InitializeFilter(pluginServer, "Bridge Effects", "Mosaic", s_targetKinds);
+        int rc = EffectHelper.InitializeFilter(pluginServer, MosaicMeta.Category, MosaicMeta.FilterName, s_targetKinds);
         if (rc != kTriglavPlugInCallResultSuccess)
             return rc;
 

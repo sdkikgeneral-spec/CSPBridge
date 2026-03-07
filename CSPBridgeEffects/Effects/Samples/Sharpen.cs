@@ -36,7 +36,7 @@ public static unsafe class Sharpen
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static int FilterInitialize(TriglavPlugInServer* pluginServer, void** data)
     {
-        int rc = EffectHelper.InitializeFilter(pluginServer, "Bridge Effects", "Sharpen", s_targetKinds);
+        int rc = EffectHelper.InitializeFilter(pluginServer, SharpenMeta.Category, SharpenMeta.FilterName, s_targetKinds);
         if (rc != kTriglavPlugInCallResultSuccess)
             return rc;
 

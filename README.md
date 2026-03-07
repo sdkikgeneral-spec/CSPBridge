@@ -46,6 +46,7 @@ CSPBridge/
 │   ├── meson.build
 │   ├── Effects/
 │   │   ├── EffectTemplate.cs.in   # エフェクトクラスのテンプレート
+│   │   ├── EffectMeta.cs.in       # エフェクトメタデータクラスのテンプレート
 │   │   ├── EffectHelper.cs        # モジュール・フィルタ初期化ヘルパー
 │   │   └── Samples/               # サンプルエフェクト実装
 │   │       └── HSV.cs             # HSV 調整サンプル
@@ -182,11 +183,13 @@ option('plugin_path',
 ```json
 {
     "effects": [
-        { "id": "Blur" },
+        { "id": "Blur", "category": "My Filters", "filterName": "Blur Effect" },
         { "id": "MyNewEffect" }
     ]
 }
 ```
+
+`category` と `filterName` を省略した場合は、デフォルト値（`"Bridge Effects"` / エフェクト ID）が使われます。
 
 ### 手書き `.cs` を持つカスタムエフェクトの場合
 
@@ -201,7 +204,7 @@ option('plugin_path',
 ```json
 {
     "effects": [
-        { "id": "HSV", "custom": true }
+        { "id": "HSV", "custom": true, "category": "My Filters", "filterName": "HSV Adjustment" }
     ]
 }
 ```
@@ -219,10 +222,11 @@ meson compile -C build
 
 meson が自動的に以下を行います。
 
-1. `effects.json` から `id` を読み取る（`jq` 使用）
-2. `"custom": true` でないエフェクトは `EffectTemplate.cs.in` から `{id}.cs` を生成（`build/CSPBridgeEffects/` に出力）
-3. `{id}.cpm`（C++ ブリッジ DLL）をビルド
-4. `CSPBridgeEffects.dll` をビルド（生成された `.cs` ファイルを含む）
+1. `effects.json` から `id` / `category` / `filterName` を読み取る（`jq` 使用）
+2. 全エフェクトに対して `EffectMeta.cs.in` から `{id}Meta.cs`（カテゴリ名・フィルタ名定数クラス）を生成
+3. `"custom": true` でないエフェクトは `EffectTemplate.cs.in` から `{id}.cs` を生成（`build/CSPBridgeEffects/` に出力）
+4. `{id}.cpm`（C++ ブリッジ DLL）をビルド
+5. `CSPBridgeEffects.dll` をビルド（生成された `.cs` ファイルを含む）
 
 ---
 
@@ -230,9 +234,21 @@ meson が自動的に以下を行います。
 
 ### エフェクトクラスの自動生成
 
-エフェクトクラスは [`CSPBridgeEffects/Effects/EffectTemplate.cs.in`](CSPBridgeEffects/Effects/EffectTemplate.cs.in) をテンプレートとして meson が自動生成します。手動での編集は不要です。
+meson は `effects.json` をもとに、2 種類のファイルを自動生成します。
 
-テンプレート内のプレースホルダ:
+**`{id}Meta.cs`**（全エフェクト共通、[`EffectMeta.cs.in`](CSPBridgeEffects/Effects/EffectMeta.cs.in) から生成）
+
+カテゴリ名とフィルタ名を定数として持つクラスです。カスタム実装からも参照されます。
+
+| プレースホルダ | 置換後の値 | 例 |
+|---|---|---|
+| `@EFFECT_ID@` | effects.json の `id` | `Blur` |
+| `@CATEGORY@` | effects.json の `category`（省略時 `"Bridge Effects"`） | `"My Filters"` |
+| `@FILTER_NAME@` | effects.json の `filterName`（省略時はエフェクト ID） | `"Blur Effect"` |
+
+**`{id}.cs`**（`"custom": true` でないエフェクトのみ、[`EffectTemplate.cs.in`](CSPBridgeEffects/Effects/EffectTemplate.cs.in) から生成）
+
+エントリポイントの骨格クラスです。内部で `{id}Meta.Category` / `{id}Meta.FilterName` を参照します。
 
 | プレースホルダ | 置換後の値 | 例 |
 |---|---|---|

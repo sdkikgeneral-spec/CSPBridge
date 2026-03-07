@@ -1,0 +1,9 @@
+// このファイルは meson.build が effects.json をもとに自動生成します。
+// 手動で編集しないでください。元のテンプレートは EffectMeta.cs.in です。
+namespace CSPBridgeEffects.Effects;
+
+internal static class @EFFECT_ID@Meta
+{
+    public const string Category   = "@CATEGORY@";
+    public const string FilterName = "@FILTER_NAME@";
+}
