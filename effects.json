@@ -1,8 +1,8 @@
 {
     "effects": [
-        { "id": "Blur" },
-        { "id": "Sharpen" },
-        { "id": "Mosaic" },
+        { "id": "Blur",    "custom": true },
+        { "id": "Sharpen", "custom": true },
+        { "id": "Mosaic",  "custom": true },
         { "id": "HSV", "custom": true }
     ]
 }

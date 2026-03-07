@@ -241,16 +241,19 @@ meson が自動的に以下を行います。
 
 ### フィルタ処理の実装
 
-各エフェクトの `FilterRun` メソッドにピクセル処理を実装します。テンプレートの `FilterRun` は空のスケルトンなので、実際の処理は **別ファイル** に実装することを推奨します。
+実際のピクセル処理を行うエフェクトには、`"custom": true` を付けて手書き `.cs` ファイルに実装することを推奨します。`Samples/HSV.cs` が完全な実装例です。
 
-```csharp
-// 例: Blur エフェクトの FilterRun（自動生成ファイル内）
-public static int FilterRun(TriglavPlugInServer* pluginServer, void** data)
-{
-    // BlurProcessor.Run(pluginServer) のように別クラスに委譲する
-    return BlurProcessor.Run(pluginServer);
-}
-```
+以下の 4 つのエントリポイントをすべて実装します。
+
+| メソッド | 役割 |
+| --- | --- |
+| `ModuleInitialize` | ホストバージョン取得・モジュール ID・種別の設定 |
+| `FilterInitialize` | カテゴリ名・フィルタ名・プロパティ（スライダーなど）の設定 |
+| `FilterRun` | ブロック単位のピクセル処理（プレビューループ含む） |
+| `FilterTerminate` | GCHandle など確保したリソースの解放 |
+
+> テンプレートから生成された `.cs`（`"custom": true` なし）の `FilterRun` は空のスケルトンです。
+> ピクセル処理を追加する場合は `"custom": true` に切り替えてください。
 
 ### 共通ヘルパー（EffectHelper）
 

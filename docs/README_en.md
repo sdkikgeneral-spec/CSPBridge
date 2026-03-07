@@ -240,16 +240,19 @@ Placeholders in the template:
 
 ### Implementing filter processing
 
-Implement pixel processing in each effect's `FilterRun` method. Since `FilterRun` in the template is an empty skeleton, implementing the actual processing in a **separate file** is recommended.
+For effects that perform actual pixel processing, use `"custom": true` and implement a hand-written `.cs` file. `Samples/HSV.cs` is the reference implementation.
 
-```csharp
-// Example: Blur effect FilterRun (inside auto-generated file)
-public static int FilterRun(TriglavPlugInServer* pluginServer, void** data)
-{
-    // Delegate to another class such as BlurProcessor.Run(pluginServer)
-    return BlurProcessor.Run(pluginServer);
-}
-```
+Implement all four entry points:
+
+| Method | Role |
+| --- | --- |
+| `ModuleInitialize` | Set host version, module ID, and module type |
+| `FilterInitialize` | Set category name, filter name, and properties (sliders, etc.) |
+| `FilterRun` | Per-block pixel processing (including preview loop) |
+| `FilterTerminate` | Release resources such as GCHandle |
+
+> The `FilterRun` in a template-generated `.cs` (without `"custom": true`) is an empty skeleton.
+> Switch to `"custom": true` when you need to add pixel processing.
 
 ### Common helper (`EffectHelper`)
 
