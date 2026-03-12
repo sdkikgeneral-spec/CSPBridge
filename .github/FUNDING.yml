@@ -1,0 +1,31 @@
+# FUNDING.yml について
+#
+# このファイルは GitHub の「スポンサー」ボタンをリポジトリページに表示するための設定ファイルです。
+# .github/FUNDING.yml に配置することで、リポジトリの右側に「Sponsor this project」ボタンが現れます。
+#
+# 対応プラットフォームと書き方:
+#
+#   github: ユーザー名またはユーザー名のリスト（GitHub Sponsors）
+#   patreon: ユーザー名
+#   open_collective: ユーザー名
+#   ko_fi: ユーザー名
+#   tidelift: "プラットフォーム/パッケージ名"（例: "npm/your-package"）
+#   community_bridge: プロジェクト名
+#   liberapay: ユーザー名
+#   issuehunt: ユーザー名
+#   lfx_crowdfunding: プロジェクト名
+#   polar: ユーザー名
+#   buy_me_a_coffee: ユーザー名
+#   thanks_dev: ユーザー名
+#   custom: カスタム URL または URL のリスト
+#
+# 例:
+#   github: octocat
+#   github: [octocat, hubot]
+#   custom: https://example.com/donate
+#   custom: ["https://example.com/donate", "https://example.com/sponsor"]
+#
+# 使用しないプラットフォームはコメントアウトするか削除してください。
+
+github: sdkikgeneral-spec
+custom: https://generic-pix.hatenablog.com/
