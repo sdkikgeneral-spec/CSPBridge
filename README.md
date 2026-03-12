@@ -1,12 +1,12 @@
-# CSPBridge
-
-## Overview
+# Overview
 
 CSPBridge is an open-source core component of an education-oriented platform,
 designed to bridge AI inference, data processing, and downstream evaluation pipelines.
 
 This repository focuses on the architectural specification and reference implementation,
 with an emphasis on practical deployment, reproducibility, and long-term maintainability.
+
+# CSPBridge
 
 CLIP STUDIO PAINT (CSP) のフィルタプラグインを **C#** で開発するためのブリッジフレームワークです。
 
