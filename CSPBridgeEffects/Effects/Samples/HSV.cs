@@ -155,78 +155,74 @@ public static unsafe class HSV
         var blockRects = ArrayPool<TriglavPlugInRect>.Shared.Rent(blockCount);
         try
         {
-        fixed (TriglavPlugInRect* pBlockRects = blockRects)
-        {
-            for (int i = 0; i < blockCount; i++)
-                offscreenSvc->getBlockRectProc(pBlockRects + i, i, dstOffscreen, &selectRect);
-        }
+            fixed (TriglavPlugInRect* pBlockRects = blockRects)
+                for (int i = 0; i < blockCount; i++)
+                    offscreenSvc->getBlockRectProc(pBlockRects + i, i, dstOffscreen, &selectRect);
 
-        TriglavPlugInFilterRunSetProgressTotal(record, host, blockCount);
+            TriglavPlugInFilterRunSetProgressTotal(record, host, blockCount);
 
-        // ---- プレビュー対応メインループ ----
-        bool restart    = true;
-        int  blockIndex = 0;
-        int  hFilter = 0, sFilter = 0, vFilter = 0;
+            // ---- プレビュー対応メインループ ----
+            bool restart    = true;
+            int  blockIndex = 0;
+            int  hFilter = 0, sFilter = 0, vFilter = 0;
 
-        while (true)
-        {
-            if (restart)
+            while (true)
             {
-                restart = false;
-
-                int procResult = kTriglavPlugInFilterRunProcessResultContinue;
-                TriglavPlugInFilterRunProcess(record, &procResult, host,
-                    kTriglavPlugInFilterRunProcessStateStart);
-                if (procResult == kTriglavPlugInFilterRunProcessResultExit) break;
-
-                // 現在のパラメータを読み取り内部スケールに変換
-                int h, s, v;
-                propertySvc->getIntegerValueProc(&h, propObj, ItemKeyHue);
-                propertySvc->getIntegerValueProc(&s, propObj, ItemKeySaturation);
-                propertySvc->getIntegerValueProc(&v, propObj, ItemKeyValue);
-
-                if (h != 0 || s != 0 || v != 0)
+                if (restart)
                 {
-                    blockIndex = 0;
-                    int hue = h < 0 ? h + 360 : h;
-                    hFilter = hue * HsvHFilterMax / 360;
-                    sFilter = s   * HsvSFilterMax / 100;
-                    vFilter = v   * HsvVFilterMax / 100;
-                }
-                else
-                {
-                    // 全パラメータ 0: 処理不要、選択範囲全体をそのまま更新
-                    blockIndex = blockCount;
-                    TriglavPlugInFilterRunUpdateDestinationOffscreenRect(record, host, &selectRect);
-                }
-            }
+                    restart = false;
 
-            if (blockIndex < blockCount)
-            {
-                TriglavPlugInFilterRunSetProgressDone(record, host, blockIndex);
-                ProcessBlock(offscreenSvc, dstOffscreen, selectOffscreen,
-                             ref blockRects[blockIndex],
-                             rIdx, gIdx, bIdx, hFilter, sFilter, vFilter);
-                fixed (TriglavPlugInRect* pBlockRects = blockRects)
-                {
-                    TriglavPlugInRect* pRect = pBlockRects + blockIndex;
-                    TriglavPlugInFilterRunUpdateDestinationOffscreenRect(record, host, pRect);
-                }
-                blockIndex++;
-            }
+                    int procResult = kTriglavPlugInFilterRunProcessResultContinue;
+                    TriglavPlugInFilterRunProcess(record, &procResult, host,
+                        kTriglavPlugInFilterRunProcessStateStart);
+                    if (procResult == kTriglavPlugInFilterRunProcessResultExit) break;
 
-            {
-                int procResult = kTriglavPlugInFilterRunProcessResultContinue;
-                int procState  = blockIndex < blockCount
-                    ? kTriglavPlugInFilterRunProcessStateContinue
-                    : kTriglavPlugInFilterRunProcessStateEnd;
-                if (procState == kTriglavPlugInFilterRunProcessStateEnd)
+                    // 現在のパラメータを読み取り内部スケールに変換
+                    int h, s, v;
+                    propertySvc->getIntegerValueProc(&h, propObj, ItemKeyHue);
+                    propertySvc->getIntegerValueProc(&s, propObj, ItemKeySaturation);
+                    propertySvc->getIntegerValueProc(&v, propObj, ItemKeyValue);
+
+                    if (h != 0 || s != 0 || v != 0)
+                    {
+                        blockIndex = 0;
+                        int hue = h < 0 ? h + 360 : h;
+                        hFilter = hue * HsvHFilterMax / 360;
+                        sFilter = s   * HsvSFilterMax / 100;
+                        vFilter = v   * HsvVFilterMax / 100;
+                    }
+                    else
+                    {
+                        // 全パラメータ 0: 処理不要、選択範囲全体をそのまま更新
+                        blockIndex = blockCount;
+                        TriglavPlugInFilterRunUpdateDestinationOffscreenRect(record, host, &selectRect);
+                    }
+                }
+
+                if (blockIndex < blockCount)
+                {
                     TriglavPlugInFilterRunSetProgressDone(record, host, blockIndex);
-                TriglavPlugInFilterRunProcess(record, &procResult, host, procState);
-                if      (procResult == kTriglavPlugInFilterRunProcessResultRestart) restart = true;
-                else if (procResult == kTriglavPlugInFilterRunProcessResultExit)    break;
+                    ProcessBlock(offscreenSvc, dstOffscreen, selectOffscreen,
+                                 ref blockRects[blockIndex],
+                                 rIdx, gIdx, bIdx, hFilter, sFilter, vFilter);
+                    fixed (TriglavPlugInRect* pBlockRects = blockRects)
+                        TriglavPlugInFilterRunUpdateDestinationOffscreenRect(
+                            record, host, pBlockRects + blockIndex);
+                    blockIndex++;
+                }
+
+                {
+                    int procResult = kTriglavPlugInFilterRunProcessResultContinue;
+                    int procState  = blockIndex < blockCount
+                        ? kTriglavPlugInFilterRunProcessStateContinue
+                        : kTriglavPlugInFilterRunProcessStateEnd;
+                    if (procState == kTriglavPlugInFilterRunProcessStateEnd)
+                        TriglavPlugInFilterRunSetProgressDone(record, host, blockCount);
+                    TriglavPlugInFilterRunProcess(record, &procResult, host, procState);
+                    if      (procResult == kTriglavPlugInFilterRunProcessResultRestart) restart = true;
+                    else if (procResult == kTriglavPlugInFilterRunProcessResultExit)    break;
+                }
             }
-        }
         }
         finally
         {

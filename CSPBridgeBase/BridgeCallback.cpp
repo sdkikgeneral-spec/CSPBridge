@@ -5,7 +5,6 @@
 #include "TriglavPlugInSDK.h"
 
 static BridgeBase g_bridgeBase;
-static const char* kEffectId = EFFECT_ID;
 
 /// <summary>
 /// 

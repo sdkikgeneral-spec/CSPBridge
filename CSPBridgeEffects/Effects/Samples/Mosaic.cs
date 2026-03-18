@@ -60,6 +60,8 @@ public static unsafe class Mosaic
         propSvc->setIntegerMaxValueProc(propObj,     ItemKeySize, 64);
         service->stringService->releaseProc(label);
 
+        // 現状は managed 側の状態保持が不要だが、ライフサイクル対称性のためハンドルは維持する。
+        // FilterTerminate で解放すること。
         var handle = GCHandle.Alloc(new object());
         *data = (void*)GCHandle.ToIntPtr(handle);
 
@@ -332,5 +334,6 @@ public static unsafe class Mosaic
         }
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int Blend8(int dst, int src, int mask) => ((dst - src) * mask / 255) + src;
 }
