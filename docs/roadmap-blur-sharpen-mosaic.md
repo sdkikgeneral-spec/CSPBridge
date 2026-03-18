@@ -1,5 +1,7 @@
 # Blur / Sharpen / Mosaic 実装ロードマップ
 
+> **ステータス**: フェーズ 1〜4 実装済み。フェーズ 5（ビルド検証）はチェックリストを参照のこと。
+
 ## 概要
 
 `effects.json` に定義された Blur・Sharpen・Mosaic エフェクトに実際のピクセル処理を実装する。
@@ -31,7 +33,7 @@ CSP がプラグインをロード
 
 ---
 
-## フェーズ 1: effects.json の変更
+## フェーズ 1: effects.json の変更 ✓
 
 **ファイル**: `effects.json`
 
@@ -56,7 +58,7 @@ Blur・Sharpen・Mosaic に `"custom": true` を追加する。
 
 ---
 
-## フェーズ 2: Blur 実装
+## フェーズ 2: Blur 実装 ✓
 
 **ファイル**: `CSPBridgeEffects/Effects/Samples/Blur.cs`
 
@@ -94,7 +96,7 @@ FilterRun
 
 ---
 
-## フェーズ 3: Sharpen 実装
+## フェーズ 3: Sharpen 実装 ✓
 
 **ファイル**: `CSPBridgeEffects/Effects/Samples/Sharpen.cs`
 
@@ -136,7 +138,7 @@ out = src + strength * (src - blur)
 
 ---
 
-## フェーズ 4: Mosaic 実装
+## フェーズ 4: Mosaic 実装 ✓
 
 **ファイル**: `CSPBridgeEffects/Effects/Samples/Mosaic.cs`
 
