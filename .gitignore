@@ -4,7 +4,8 @@
 CSPBridgeBase/.vs/
 
 # Claude Code
-.claude/
+.claude/*
+!.claude/agents/
 
 # Build outputs
 build/
