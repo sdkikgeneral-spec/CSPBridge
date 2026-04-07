@@ -1,3 +1,15 @@
+> [!WARNING]
+> **ARCHIVED — 不採用の技術調査文書**
+>
+> このドキュメントは技術調査段階の比較検討資料であり、採用されなかった代替案です。
+> 現行アーキテクチャは **C# + .NET CoreCLR** であり、本文書が推奨する TypeScript + QuickJS-NG は採用されていません。
+>
+> 本文書中の「1プロセス1CLR」「CLRアンロード不可」という制約に関する記述は、
+> 現行実装では `BridgeBase.Initialize()` のセカンダリコンテキスト再利用で対処済みです。
+> 正確なアーキテクチャは `CLAUDE.md` および `docs/spec_sheet.md` を参照してください。
+>
+> ステータス: ARCHIVED — NOT ADOPTED
+
 # CSP BridgePluginにおけるTypeScript実装の技術的実現可能性
 
 **結論：TypeScriptのトランスパイル方式は、既存のQuickJS-NG統合に対してほぼゼロコストで型安全性を追加できる最も費用対効果の高い選択肢である。** ネイティブTS実行方式（Deno/Bun/Node.js組み込み）はいずれもバイナリサイズが80〜107MBに達し、CSPプラグインとしては非現実的と判断される。トランスパイル方式を採用すればランタイムは従来のQuickJS-NG（約1MB）のままで、開発時にのみTypeScriptの型チェックとIDE補完の恩恵を受けられる。JS・Python・TypeScript・C#の4言語を横断して評価した結果、**TypeScript（トランスパイル方式）がCSP BridgePluginスクリプティングにおける最適解**である。

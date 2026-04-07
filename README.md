@@ -16,8 +16,10 @@ CSP
       └─ BridgeBase — hostfxr → CoreCLR を初期化
            └─ CSPBridgeEffects.dll  (C#)
                 └─ CSPBridgeEffects.Effects.{EffectId}
-                     ├─ FilterInitialize  — パラメータ UI の定義
-                     └─ FilterRun         — ピクセル処理
+                     ├─ ModuleInitialize  — モジュール ID・種別の設定
+                     ├─ FilterInitialize  — パラメータ UI の定義・コールバック登録
+                     ├─ FilterTerminate   — リソースの解放
+                     └─ FilterRun         — ブロック単位のピクセル処理
 ```
 
 - **エフェクトの追加は `effects.json` を編集するだけ**。C++ コードの変更は不要です。
