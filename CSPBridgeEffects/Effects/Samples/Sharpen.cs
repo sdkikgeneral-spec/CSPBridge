@@ -4,6 +4,7 @@ using System;
 using System.Buffers;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using CSPBridgeEffects.Effects.Kernels;
 using CSPBridgeEffects.Library.SDK;
 using static CSPBridgeEffects.Library.SDK.CSPBridgeEffectsLibDefine;
 using static CSPBridgeEffects.Library.SDK.CSPBridgeEffectsLibRecordFunction;
@@ -110,11 +111,9 @@ public static unsafe class Sharpen
 
         var host = pluginServer->hostObject;
 
-        TriglavPlugInPropertyObject  propObj;
         TriglavPlugInOffscreenObject srcOffscreen, dstOffscreen, selectOffscreen;
         TriglavPlugInRect            selectRect;
 
-        TriglavPlugInFilterRunGetProperty(record, &propObj, host);
         TriglavPlugInFilterRunGetSourceOffscreen(record, &srcOffscreen, host);
         TriglavPlugInFilterRunGetDestinationOffscreen(record, &dstOffscreen, host);
         TriglavPlugInFilterRunGetSelectAreaRect(record, &selectRect, host);
@@ -123,68 +122,41 @@ public static unsafe class Sharpen
         int rIdx, gIdx, bIdx;
         offscreenSvc->getRGBChannelIndexProc(&rIdx, &gIdx, &bIdx, dstOffscreen);
 
-        int blockCount;
-        offscreenSvc->getBlockRectCountProc(&blockCount, dstOffscreen, &selectRect);
-        var blockRects = ArrayPool<TriglavPlugInRect>.Shared.Rent(blockCount);
-        try
+        // ラムダキャプチャのため参照型ホルダーに状態を格納する。
+        var s = new SharpenRunState
         {
-            fixed (TriglavPlugInRect* pBlockRects = blockRects)
-                for (int i = 0; i < blockCount; i++)
-                    offscreenSvc->getBlockRectProc(pBlockRects + i, i, dstOffscreen, &selectRect);
+            srcOffscreen    = srcOffscreen,
+            selectOffscreen = selectOffscreen,
+            rIdx            = rIdx,
+            gIdx            = gIdx,
+            bIdx            = bIdx,
+            strength        = 100,
+            radius          = 2,
+        };
 
-            TriglavPlugInFilterRunSetProgressTotal(record, host, blockCount);
-
-            bool restart    = true;
-            int  blockIndex = 0;
-            int  strength   = 100;
-            int  radius     = 2;
-
-            while (true)
+        return EffectHelper.RunPreviewLoop(
+            pluginServer, dstOffscreen, &selectRect,
+            readParameters: (propSvc, propObj) =>
             {
-                if (restart)
-                {
-                    restart = false;
+                int vs = s.strength, vr = s.radius;
+                propSvc->getIntegerValueProc(&vs, propObj, ItemKeyStrength);
+                propSvc->getIntegerValueProc(&vr, propObj, ItemKeyRadius);
+                s.strength = vs;
+                s.radius   = vr;
+            },
+            processBlock: (osSvc, dst, blockRect, idx) =>
+            {
+                ProcessBlock(osSvc, dst, s.srcOffscreen, s.selectOffscreen,
+                             ref blockRect, s.rIdx, s.gIdx, s.bIdx, s.strength, s.radius);
+            });
+    }
 
-                    int procResult = kTriglavPlugInFilterRunProcessResultContinue;
-                    TriglavPlugInFilterRunProcess(record, &procResult, host,
-                        kTriglavPlugInFilterRunProcessStateStart);
-                    if (procResult == kTriglavPlugInFilterRunProcessResultExit) break;
-
-                    propertySvc->getIntegerValueProc(&strength, propObj, ItemKeyStrength);
-                    propertySvc->getIntegerValueProc(&radius,   propObj, ItemKeyRadius);
-                    blockIndex = 0;
-                }
-
-                if (blockIndex < blockCount)
-                {
-                    TriglavPlugInFilterRunSetProgressDone(record, host, blockIndex);
-                    ProcessBlock(offscreenSvc, dstOffscreen, srcOffscreen, selectOffscreen,
-                                 ref blockRects[blockIndex], rIdx, gIdx, bIdx, strength, radius);
-                    fixed (TriglavPlugInRect* pBlockRects = blockRects)
-                        TriglavPlugInFilterRunUpdateDestinationOffscreenRect(
-                            record, host, pBlockRects + blockIndex);
-                    blockIndex++;
-                }
-
-                {
-                    int procResult = kTriglavPlugInFilterRunProcessResultContinue;
-                    int procState  = blockIndex < blockCount
-                        ? kTriglavPlugInFilterRunProcessStateContinue
-                        : kTriglavPlugInFilterRunProcessStateEnd;
-                    if (procState == kTriglavPlugInFilterRunProcessStateEnd)
-                        TriglavPlugInFilterRunSetProgressDone(record, host, blockCount);
-                    TriglavPlugInFilterRunProcess(record, &procResult, host, procState);
-                    if      (procResult == kTriglavPlugInFilterRunProcessResultRestart) restart = true;
-                    else if (procResult == kTriglavPlugInFilterRunProcessResultExit)    break;
-                }
-            }
-        }
-        finally
-        {
-            ArrayPool<TriglavPlugInRect>.Shared.Return(blockRects);
-        }
-
-        return kTriglavPlugInCallResultSuccess;
+    // ラムダキャプチャ用状態ホルダー（FilterRun スコープで生存）
+    private sealed class SharpenRunState
+    {
+        public TriglavPlugInOffscreenObject srcOffscreen;
+        public TriglavPlugInOffscreenObject selectOffscreen;
+        public int rIdx, gIdx, bIdx, strength, radius;
     }
 
     // ================================================================
@@ -202,10 +174,14 @@ public static unsafe class Sharpen
     }
 
     // ================================================================
-    // ブロック処理 — Unsharp Mask
+    // ブロック処理 — SharpenKernel への委譲
     //   dst = clamp(src + strength/100 × (src − blur(src)), 0, 255)
     // ================================================================
 
+    /// <summary>
+    /// 1 ブロック分の Sharpen 処理を行います。
+    /// SDK からポインタを取得し、Span に変換して SharpenKernel を呼び出します。
+    /// </summary>
     private static void ProcessBlock(
         TriglavPlugInOffscreenService* offscreenSvc,
         TriglavPlugInOffscreenObject   dstOffscreen,
@@ -231,103 +207,47 @@ public static unsafe class Sharpen
         int h = blockRect.bottom - blockRect.top;
         if (w <= 0 || h <= 0) return;
 
-        // 中間バッファ: セパラブル Box Blur の水平パス結果（各チャンネル 1 int × w*h）
         int size = w * h;
         int[] tmpR = ArrayPool<int>.Shared.Rent(size);
         int[] tmpG = ArrayPool<int>.Shared.Rent(size);
         int[] tmpB = ArrayPool<int>.Shared.Rent(size);
         try
         {
-            // --- パス 1: 水平方向 Box Blur (src → tmp) ---
-            byte* src = (byte*)srcImg;
-            for (int y = 0; y < h; y++)
-            {
-                for (int x = 0; x < w; x++)
-                {
-                    int sumR = 0, sumG = 0, sumB = 0;
-                    int x0  = x - radius >= 0 ? x - radius : 0;
-                    int x1  = x + radius <  w ? x + radius : w - 1;
-                    int cnt = x1 - x0 + 1;
-                    for (int nx = x0; nx <= x1; nx++)
-                    {
-                        byte* p = src + y * srcRowBytes + nx * srcPixBytes;
-                        sumR += p[rIdx]; sumG += p[gIdx]; sumB += p[bIdx];
-                    }
-                    int i = y * w + x;
-                    tmpR[i] = sumR / cnt;
-                    tmpG[i] = sumG / cnt;
-                    tmpB[i] = sumB / cnt;
-                }
-            }
+            var srcSpan   = new ReadOnlySpan<byte>(srcImg,   h * srcRowBytes);
+            var dstSpan   = new Span<byte>(dstImg,           h * dstRowBytes);
+            var alphaSpan = new ReadOnlySpan<byte>(dstAlpha, h * alphaRowBytes);
 
-            // --- パス 2: 垂直方向 Box Blur → Unsharp Mask (tmp → dst) ---
+            // パス 1: 水平方向 Box Blur (src → tmp)
+            SharpenKernel.HorizontalPass(
+                srcSpan, srcRowBytes, srcPixBytes,
+                tmpR, tmpG, tmpB,
+                w, h, rIdx, gIdx, bIdx, radius);
+
+            // パス 2: 垂直方向 Box Blur → Unsharp Mask (tmp → dst)
             if (selectOffscreen.value == null)
             {
-                // 選択範囲なし
-                byte* dst   = (byte*)dstImg;
-                byte* alpha = (byte*)dstAlpha;
-                for (int y = 0; y < h; y++)
-                {
-                    for (int x = 0; x < w; x++)
-                    {
-                        if (alpha[y * alphaRowBytes + x * alphaPixBytes] == 0) continue;
-
-                        int blurR = VerticalBlur(tmpR, x, y, w, h, radius);
-                        int blurG = VerticalBlur(tmpG, x, y, w, h, radius);
-                        int blurB = VerticalBlur(tmpB, x, y, w, h, radius);
-
-                        byte* sp = src + y * srcRowBytes + x * srcPixBytes;
-                        byte* d  = dst + y * dstRowBytes + x * dstPixBytes;
-                        d[rIdx] = (byte)ApplyUnsharp(sp[rIdx], blurR, strength);
-                        d[gIdx] = (byte)ApplyUnsharp(sp[gIdx], blurG, strength);
-                        d[bIdx] = (byte)ApplyUnsharp(sp[bIdx], blurB, strength);
-                    }
-                }
+                SharpenKernel.VerticalPassUnsharp(
+                    dstSpan,   dstRowBytes,   dstPixBytes,
+                    srcSpan,   srcRowBytes,   srcPixBytes,
+                    alphaSpan, alphaRowBytes, alphaPixBytes,
+                    tmpR, tmpG, tmpB,
+                    w, h, rIdx, gIdx, bIdx, radius, strength);
             }
             else
             {
-                // 選択範囲あり
                 void* selPtr; int selRowBytes, selPixBytes;
                 offscreenSvc->getBlockSelectAreaProc(
                     &selPtr, &selRowBytes, &selPixBytes, &outRect, selectOffscreen, &pos);
                 if (selPtr == null) return;
 
-                byte* dst   = (byte*)dstImg;
-                byte* alpha = (byte*)dstAlpha;
-                byte* sel   = (byte*)selPtr;
-                for (int y = 0; y < h; y++)
-                {
-                    for (int x = 0; x < w; x++)
-                    {
-                        if (alpha[y * alphaRowBytes + x * alphaPixBytes] == 0) continue;
-
-                        byte selVal = sel[y * selRowBytes + x * selPixBytes];
-                        if (selVal == 0) continue;
-
-                        int blurR = VerticalBlur(tmpR, x, y, w, h, radius);
-                        int blurG = VerticalBlur(tmpG, x, y, w, h, radius);
-                        int blurB = VerticalBlur(tmpB, x, y, w, h, radius);
-
-                        byte* sp = src + y * srcRowBytes + x * srcPixBytes;
-                        byte* d  = dst + y * dstRowBytes + x * dstPixBytes;
-                        int   shR = ApplyUnsharp(sp[rIdx], blurR, strength);
-                        int   shG = ApplyUnsharp(sp[gIdx], blurG, strength);
-                        int   shB = ApplyUnsharp(sp[bIdx], blurB, strength);
-
-                        if (selVal == 255)
-                        {
-                            d[rIdx] = (byte)shR;
-                            d[gIdx] = (byte)shG;
-                            d[bIdx] = (byte)shB;
-                        }
-                        else
-                        {
-                            d[rIdx] = (byte)Blend8(shR, sp[rIdx], selVal);
-                            d[gIdx] = (byte)Blend8(shG, sp[gIdx], selVal);
-                            d[bIdx] = (byte)Blend8(shB, sp[bIdx], selVal);
-                        }
-                    }
-                }
+                var selSpan = new ReadOnlySpan<byte>(selPtr, h * selRowBytes);
+                SharpenKernel.VerticalPassUnsharpWithSelection(
+                    dstSpan,   dstRowBytes,   dstPixBytes,
+                    srcSpan,   srcRowBytes,   srcPixBytes,
+                    alphaSpan, alphaRowBytes, alphaPixBytes,
+                    selSpan,   selRowBytes,   selPixBytes,
+                    tmpR, tmpG, tmpB,
+                    w, h, rIdx, gIdx, bIdx, radius, strength);
             }
         }
         finally
@@ -337,33 +257,4 @@ public static unsafe class Sharpen
             ArrayPool<int>.Shared.Return(tmpB);
         }
     }
-
-    // ================================================================
-    // ユーティリティ
-    // ================================================================
-
-    /// <summary>垂直方向の Box Blur を 1 ピクセル分だけ計算します。</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static int VerticalBlur(int[] tmp, int x, int y, int w, int h, int radius)
-    {
-        int sum = 0;
-        int y0  = y - radius >= 0 ? y - radius : 0;
-        int y1  = y + radius <  h ? y + radius : h - 1;
-        int cnt = y1 - y0 + 1;
-        for (int ny = y0; ny <= y1; ny++)
-            sum += tmp[ny * w + x];
-        return sum / cnt;
-    }
-
-    /// <summary>Unsharp Mask を 1 チャンネル分だけ適用し 0〜255 にクランプします。</summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static int ApplyUnsharp(int src, int blur, int strength)
-    {
-        // dst = src + strength/100 × (src - blur)
-        int result = src + (src - blur) * strength / 100;
-        return result < 0 ? 0 : result > 255 ? 255 : result;
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static int Blend8(int dst, int src, int mask) => ((dst - src) * mask / 255) + src;
 }

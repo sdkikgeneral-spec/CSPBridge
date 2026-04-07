@@ -1,9 +1,28 @@
 using System;
+using System.Buffers;
 using CSPBridgeEffects.Library.SDK;
 using static CSPBridgeEffects.Library.SDK.CSPBridgeEffectsLibDefine;
 using static CSPBridgeEffects.Library.SDK.CSPBridgeEffectsLibRecordFunction;
 
 namespace CSPBridgeEffects.Effects;
+
+/// <summary>
+/// プレビューの Restart 時にプロパティ値を読み取るコールバック。
+/// </summary>
+internal unsafe delegate void ReadParametersDelegate(
+    TriglavPlugInPropertyService* propertySvc,
+    TriglavPlugInPropertyObject   propObj);
+
+/// <summary>
+/// 1 ブロック分のピクセル処理を行うコールバック。
+/// blockIndex はブロック配列のインデックス。blockRect は値コピーで渡す
+/// （ラムダ内で ref キャプチャできない C# の制約への対処）。
+/// </summary>
+internal unsafe delegate void ProcessBlockDelegate(
+    TriglavPlugInOffscreenService* offscreenSvc,
+    TriglavPlugInOffscreenObject   dstOffscreen,
+    TriglavPlugInRect              blockRect,
+    int                            blockIndex);
 
 /// <summary>
 /// エフェクト実装の共通ヘルパーメソッドを提供します。
@@ -81,6 +100,97 @@ internal static unsafe class EffectHelper
         // ターゲット種別
         fixed (int* pKinds = targetKinds)
             TriglavPlugInFilterInitializeSetTargetKinds(record, host, pKinds, targetKinds.Length);
+
+        return kTriglavPlugInCallResultSuccess;
+    }
+
+    /// <summary>
+    /// プレビュー対応のブロック処理ループを実行します。
+    /// ブロック矩形リストの取得・ArrayPool 確保・解放、プログレス管理、
+    /// Start / Continue / End / Restart / Exit のステート管理をすべて内包します。
+    /// Restart 時に readParameters を呼び出し、ブロック処理時に processBlock を呼び出します。
+    /// </summary>
+    /// <param name="server">プラグインサーバーポインタ。</param>
+    /// <param name="dstOffscreen">書き込み先オフスクリーン。</param>
+    /// <param name="selectRect">選択矩形（ブロック分割の基準）。</param>
+    /// <param name="readParameters">Restart 時にパラメータを読み取るコールバック。</param>
+    /// <param name="processBlock">1 ブロック分のピクセル処理コールバック。</param>
+    internal static int RunPreviewLoop(
+        TriglavPlugInServer*         server,
+        TriglavPlugInOffscreenObject dstOffscreen,
+        TriglavPlugInRect*           selectRect,
+        ReadParametersDelegate       readParameters,
+        ProcessBlockDelegate         processBlock)
+    {
+        var record       = &server->recordSuite;
+        var host         = server->hostObject;
+        var offscreenSvc = server->serviceSuite.offscreenService;
+        var propertySvc  = server->serviceSuite.propertyService;
+
+        // Restart 時に渡すプロパティオブジェクトをここで一度取得する。
+        // FilterRun 呼び出し元がすでに取得済みの場合もあるが、
+        // RunPreviewLoop が自律的に完結するよう再取得する。
+        TriglavPlugInPropertyObject propObj;
+        TriglavPlugInFilterRunGetProperty(record, &propObj, host);
+
+        // ブロック矩形リストを構築
+        int blockCount;
+        offscreenSvc->getBlockRectCountProc(&blockCount, dstOffscreen, selectRect);
+        var blockRects = ArrayPool<TriglavPlugInRect>.Shared.Rent(blockCount);
+        try
+        {
+            fixed (TriglavPlugInRect* pBlockRects = blockRects)
+                for (int i = 0; i < blockCount; i++)
+                    offscreenSvc->getBlockRectProc(pBlockRects + i, i, dstOffscreen, selectRect);
+
+            TriglavPlugInFilterRunSetProgressTotal(record, host, blockCount);
+
+            bool restart    = true;
+            int  blockIndex = 0;
+
+            while (true)
+            {
+                if (restart)
+                {
+                    restart = false;
+
+                    int procResult = kTriglavPlugInFilterRunProcessResultContinue;
+                    TriglavPlugInFilterRunProcess(record, &procResult, host,
+                        kTriglavPlugInFilterRunProcessStateStart);
+                    if (procResult == kTriglavPlugInFilterRunProcessResultExit) break;
+
+                    readParameters(propertySvc, propObj);
+                    blockIndex = 0;
+                }
+
+                if (blockIndex < blockCount)
+                {
+                    TriglavPlugInFilterRunSetProgressDone(record, host, blockIndex);
+                    // blockRect は値コピーで渡す（ラムダ内での ref キャプチャ不可のため）
+                    processBlock(offscreenSvc, dstOffscreen, blockRects[blockIndex], blockIndex);
+                    fixed (TriglavPlugInRect* pBlockRects = blockRects)
+                        TriglavPlugInFilterRunUpdateDestinationOffscreenRect(
+                            record, host, pBlockRects + blockIndex);
+                    blockIndex++;
+                }
+
+                {
+                    int procResult = kTriglavPlugInFilterRunProcessResultContinue;
+                    int procState  = blockIndex < blockCount
+                        ? kTriglavPlugInFilterRunProcessStateContinue
+                        : kTriglavPlugInFilterRunProcessStateEnd;
+                    if (procState == kTriglavPlugInFilterRunProcessStateEnd)
+                        TriglavPlugInFilterRunSetProgressDone(record, host, blockCount);
+                    TriglavPlugInFilterRunProcess(record, &procResult, host, procState);
+                    if      (procResult == kTriglavPlugInFilterRunProcessResultRestart) restart = true;
+                    else if (procResult == kTriglavPlugInFilterRunProcessResultExit)    break;
+                }
+            }
+        }
+        finally
+        {
+            ArrayPool<TriglavPlugInRect>.Shared.Return(blockRects);
+        }
 
         return kTriglavPlugInCallResultSuccess;
     }

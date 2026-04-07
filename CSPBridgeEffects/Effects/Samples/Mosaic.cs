@@ -1,9 +1,9 @@
 // モザイク（ピクセル化）フィルタ実装
 // EffectTemplate.cs.in と同じ 4 エントリポイント構造で実装しています。
 using System;
-using System.Buffers;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using CSPBridgeEffects.Effects.Kernels;
 using CSPBridgeEffects.Library.SDK;
 using static CSPBridgeEffects.Library.SDK.CSPBridgeEffectsLibDefine;
 using static CSPBridgeEffects.Library.SDK.CSPBridgeEffectsLibRecordFunction;
@@ -96,11 +96,9 @@ public static unsafe class Mosaic
 
         var host = pluginServer->hostObject;
 
-        TriglavPlugInPropertyObject  propObj;
         TriglavPlugInOffscreenObject dstOffscreen, selectOffscreen;
         TriglavPlugInRect            selectRect;
 
-        TriglavPlugInFilterRunGetProperty(record, &propObj, host);
         TriglavPlugInFilterRunGetDestinationOffscreen(record, &dstOffscreen, host);
         TriglavPlugInFilterRunGetSelectAreaRect(record, &selectRect, host);
         TriglavPlugInFilterRunGetSelectAreaOffscreen(record, &selectOffscreen, host);
@@ -108,67 +106,37 @@ public static unsafe class Mosaic
         int rIdx, gIdx, bIdx;
         offscreenSvc->getRGBChannelIndexProc(&rIdx, &gIdx, &bIdx, dstOffscreen);
 
-        int blockCount;
-        offscreenSvc->getBlockRectCountProc(&blockCount, dstOffscreen, &selectRect);
-        var blockRects = ArrayPool<TriglavPlugInRect>.Shared.Rent(blockCount);
-        try
+        // ラムダキャプチャのため参照型ホルダーに状態を格納する。
+        var s = new MosaicRunState
         {
-            fixed (TriglavPlugInRect* pBlockRects = blockRects)
-                for (int i = 0; i < blockCount; i++)
-                    offscreenSvc->getBlockRectProc(pBlockRects + i, i, dstOffscreen, &selectRect);
+            selectOffscreen = selectOffscreen,
+            rIdx            = rIdx,
+            gIdx            = gIdx,
+            bIdx            = bIdx,
+            cellSize        = 16,
+        };
 
-            TriglavPlugInFilterRunSetProgressTotal(record, host, blockCount);
-
-            bool restart    = true;
-            int  blockIndex = 0;
-            int  cellSize   = 16;
-
-            while (true)
+        return EffectHelper.RunPreviewLoop(
+            pluginServer, dstOffscreen, &selectRect,
+            readParameters: (propSvc, propObj) =>
             {
-                if (restart)
-                {
-                    restart = false;
+                int v = s.cellSize;
+                propSvc->getIntegerValueProc(&v, propObj, ItemKeySize);
+                if (v < 2) v = 2;
+                s.cellSize = v;
+            },
+            processBlock: (osSvc, dst, blockRect, idx) =>
+            {
+                ProcessBlock(osSvc, dst, s.selectOffscreen,
+                             ref blockRect, s.rIdx, s.gIdx, s.bIdx, s.cellSize);
+            });
+    }
 
-                    int procResult = kTriglavPlugInFilterRunProcessResultContinue;
-                    TriglavPlugInFilterRunProcess(record, &procResult, host,
-                        kTriglavPlugInFilterRunProcessStateStart);
-                    if (procResult == kTriglavPlugInFilterRunProcessResultExit) break;
-
-                    propertySvc->getIntegerValueProc(&cellSize, propObj, ItemKeySize);
-                    if (cellSize < 2) cellSize = 2;
-                    blockIndex = 0;
-                }
-
-                if (blockIndex < blockCount)
-                {
-                    TriglavPlugInFilterRunSetProgressDone(record, host, blockIndex);
-                    ProcessBlock(offscreenSvc, dstOffscreen, selectOffscreen,
-                                 ref blockRects[blockIndex], rIdx, gIdx, bIdx, cellSize);
-                    fixed (TriglavPlugInRect* pBlockRects = blockRects)
-                        TriglavPlugInFilterRunUpdateDestinationOffscreenRect(
-                            record, host, pBlockRects + blockIndex);
-                    blockIndex++;
-                }
-
-                {
-                    int procResult = kTriglavPlugInFilterRunProcessResultContinue;
-                    int procState  = blockIndex < blockCount
-                        ? kTriglavPlugInFilterRunProcessStateContinue
-                        : kTriglavPlugInFilterRunProcessStateEnd;
-                    if (procState == kTriglavPlugInFilterRunProcessStateEnd)
-                        TriglavPlugInFilterRunSetProgressDone(record, host, blockCount);
-                    TriglavPlugInFilterRunProcess(record, &procResult, host, procState);
-                    if      (procResult == kTriglavPlugInFilterRunProcessResultRestart) restart = true;
-                    else if (procResult == kTriglavPlugInFilterRunProcessResultExit)    break;
-                }
-            }
-        }
-        finally
-        {
-            ArrayPool<TriglavPlugInRect>.Shared.Return(blockRects);
-        }
-
-        return kTriglavPlugInCallResultSuccess;
+    // ラムダキャプチャ用状態ホルダー（FilterRun スコープで生存）
+    private sealed class MosaicRunState
+    {
+        public TriglavPlugInOffscreenObject selectOffscreen;
+        public int rIdx, gIdx, bIdx, cellSize;
     }
 
     // ================================================================
@@ -186,9 +154,13 @@ public static unsafe class Mosaic
     }
 
     // ================================================================
-    // ブロック処理 — セル単位ピクセル化
+    // ブロック処理 — MosaicKernel への委譲
     // ================================================================
 
+    /// <summary>
+    /// 1 ブロック分のモザイク処理を行います。
+    /// SDK からポインタを取得し、Span に変換して MosaicKernel を呼び出します。
+    /// </summary>
     private static void ProcessBlock(
         TriglavPlugInOffscreenService* offscreenSvc,
         TriglavPlugInOffscreenObject   dstOffscreen,
@@ -211,129 +183,33 @@ public static unsafe class Mosaic
         int h = blockRect.bottom - blockRect.top;
         if (w <= 0 || h <= 0) return;
 
-        byte* dst   = (byte*)dstImg;
-        byte* alpha = (byte*)dstAlpha;
-
-        // セルグリッドはグローバル座標に整列させる（ブロック間で継ぎ目なし）
-        // cellLeft/cellTop: ブロックの左上を含む最初のセル左上（グローバル座標）
-        int cellLeft = blockRect.left / cellSize * cellSize;
-        int cellTop  = blockRect.top  / cellSize * cellSize;
+        var dstSpan   = new Span<byte>(dstImg,           h * dstRowBytes);
+        var alphaSpan = new ReadOnlySpan<byte>(dstAlpha, h * alphaRowBytes);
 
         if (selectOffscreen.value == null)
         {
-            // --- 選択範囲なし ---
-            for (int cy = cellTop; cy < blockRect.bottom; cy += cellSize)
-            {
-                for (int cx = cellLeft; cx < blockRect.right; cx += cellSize)
-                {
-                    // セルとブロックの交差領域（ローカル座標）
-                    int lx0 = (cx > blockRect.left  ? cx : blockRect.left)  - blockRect.left;
-                    int ly0 = (cy > blockRect.top   ? cy : blockRect.top)   - blockRect.top;
-                    int lx1 = (cx + cellSize < blockRect.right  ? cx + cellSize : blockRect.right)  - blockRect.left;
-                    int ly1 = (cy + cellSize < blockRect.bottom ? cy + cellSize : blockRect.bottom) - blockRect.top;
-
-                    // 非透明ピクセルの平均色を計算
-                    long sumR = 0, sumG = 0, sumB = 0;
-                    int  cnt  = 0;
-                    for (int ly = ly0; ly < ly1; ly++)
-                    {
-                        for (int lx = lx0; lx < lx1; lx++)
-                        {
-                            if (alpha[ly * alphaRowBytes + lx * alphaPixBytes] == 0) continue;
-                            byte* p = dst + ly * dstRowBytes + lx * dstPixBytes;
-                            sumR += p[rIdx]; sumG += p[gIdx]; sumB += p[bIdx];
-                            cnt++;
-                        }
-                    }
-                    if (cnt == 0) continue;
-
-                    byte avgR = (byte)(sumR / cnt);
-                    byte avgG = (byte)(sumG / cnt);
-                    byte avgB = (byte)(sumB / cnt);
-
-                    // セル内を平均色で塗り潰す
-                    for (int ly = ly0; ly < ly1; ly++)
-                    {
-                        for (int lx = lx0; lx < lx1; lx++)
-                        {
-                            if (alpha[ly * alphaRowBytes + lx * alphaPixBytes] == 0) continue;
-                            byte* d = dst + ly * dstRowBytes + lx * dstPixBytes;
-                            d[rIdx] = avgR;
-                            d[gIdx] = avgG;
-                            d[bIdx] = avgB;
-                        }
-                    }
-                }
-            }
+            MosaicKernel.Process(
+                dstSpan,   dstRowBytes,   dstPixBytes,
+                alphaSpan, alphaRowBytes, alphaPixBytes,
+                w, h,
+                blockRect.left, blockRect.top, blockRect.right, blockRect.bottom,
+                rIdx, gIdx, bIdx, cellSize);
         }
         else
         {
-            // --- 選択範囲あり ---
             void* selPtr; int selRowBytes, selPixBytes;
             offscreenSvc->getBlockSelectAreaProc(
                 &selPtr, &selRowBytes, &selPixBytes, &outRect, selectOffscreen, &pos);
             if (selPtr == null) return;
 
-            byte* sel = (byte*)selPtr;
-
-            for (int cy = cellTop; cy < blockRect.bottom; cy += cellSize)
-            {
-                for (int cx = cellLeft; cx < blockRect.right; cx += cellSize)
-                {
-                    int lx0 = (cx > blockRect.left  ? cx : blockRect.left)  - blockRect.left;
-                    int ly0 = (cy > blockRect.top   ? cy : blockRect.top)   - blockRect.top;
-                    int lx1 = (cx + cellSize < blockRect.right  ? cx + cellSize : blockRect.right)  - blockRect.left;
-                    int ly1 = (cy + cellSize < blockRect.bottom ? cy + cellSize : blockRect.bottom) - blockRect.top;
-
-                    // 非透明ピクセルの平均色（選択範囲を問わず全体を集計）
-                    long sumR = 0, sumG = 0, sumB = 0;
-                    int  cnt  = 0;
-                    for (int ly = ly0; ly < ly1; ly++)
-                    {
-                        for (int lx = lx0; lx < lx1; lx++)
-                        {
-                            if (alpha[ly * alphaRowBytes + lx * alphaPixBytes] == 0) continue;
-                            byte* p = dst + ly * dstRowBytes + lx * dstPixBytes;
-                            sumR += p[rIdx]; sumG += p[gIdx]; sumB += p[bIdx];
-                            cnt++;
-                        }
-                    }
-                    if (cnt == 0) continue;
-
-                    byte avgR = (byte)(sumR / cnt);
-                    byte avgG = (byte)(sumG / cnt);
-                    byte avgB = (byte)(sumB / cnt);
-
-                    // 選択値に応じてマスク合成しながら塗り潰す
-                    for (int ly = ly0; ly < ly1; ly++)
-                    {
-                        for (int lx = lx0; lx < lx1; lx++)
-                        {
-                            if (alpha[ly * alphaRowBytes + lx * alphaPixBytes] == 0) continue;
-
-                            byte selVal = sel[ly * selRowBytes + lx * selPixBytes];
-                            if (selVal == 0) continue;
-
-                            byte* d = dst + ly * dstRowBytes + lx * dstPixBytes;
-                            if (selVal == 255)
-                            {
-                                d[rIdx] = avgR;
-                                d[gIdx] = avgG;
-                                d[bIdx] = avgB;
-                            }
-                            else
-                            {
-                                d[rIdx] = (byte)Blend8(avgR, d[rIdx], selVal);
-                                d[gIdx] = (byte)Blend8(avgG, d[gIdx], selVal);
-                                d[bIdx] = (byte)Blend8(avgB, d[bIdx], selVal);
-                            }
-                        }
-                    }
-                }
-            }
+            var selSpan = new ReadOnlySpan<byte>(selPtr, h * selRowBytes);
+            MosaicKernel.ProcessWithSelection(
+                dstSpan,   dstRowBytes,   dstPixBytes,
+                alphaSpan, alphaRowBytes, alphaPixBytes,
+                selSpan,   selRowBytes,   selPixBytes,
+                w, h,
+                blockRect.left, blockRect.top, blockRect.right, blockRect.bottom,
+                rIdx, gIdx, bIdx, cellSize);
         }
     }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static int Blend8(int dst, int src, int mask) => ((dst - src) * mask / 255) + src;
 }

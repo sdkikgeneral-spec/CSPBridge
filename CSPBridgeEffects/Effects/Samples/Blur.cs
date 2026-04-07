@@ -4,6 +4,7 @@ using System;
 using System.Buffers;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using CSPBridgeEffects.Effects.Kernels;
 using CSPBridgeEffects.Library.SDK;
 using static CSPBridgeEffects.Library.SDK.CSPBridgeEffectsLibDefine;
 using static CSPBridgeEffects.Library.SDK.CSPBridgeEffectsLibRecordFunction;
@@ -97,11 +98,9 @@ public static unsafe class Blur
 
         var host = pluginServer->hostObject;
 
-        TriglavPlugInPropertyObject  propObj;
         TriglavPlugInOffscreenObject srcOffscreen, dstOffscreen, selectOffscreen;
         TriglavPlugInRect            selectRect;
 
-        TriglavPlugInFilterRunGetProperty(record, &propObj, host);
         TriglavPlugInFilterRunGetSourceOffscreen(record, &srcOffscreen, host);
         TriglavPlugInFilterRunGetDestinationOffscreen(record, &dstOffscreen, host);
         TriglavPlugInFilterRunGetSelectAreaRect(record, &selectRect, host);
@@ -110,66 +109,40 @@ public static unsafe class Blur
         int rIdx, gIdx, bIdx;
         offscreenSvc->getRGBChannelIndexProc(&rIdx, &gIdx, &bIdx, dstOffscreen);
 
-        int blockCount;
-        offscreenSvc->getBlockRectCountProc(&blockCount, dstOffscreen, &selectRect);
-        var blockRects = ArrayPool<TriglavPlugInRect>.Shared.Rent(blockCount);
-        try
+        // ラムダキャプチャのため参照型ホルダーに状態を格納する。
+        // unsafe struct はスタック変数なので直接ラムダにキャプチャできないため、
+        // フィールドとしてヒープに移動し、値コピーで受け渡しする。
+        var s = new BlurRunState
         {
-            fixed (TriglavPlugInRect* pBlockRects = blockRects)
-                for (int i = 0; i < blockCount; i++)
-                    offscreenSvc->getBlockRectProc(pBlockRects + i, i, dstOffscreen, &selectRect);
+            srcOffscreen    = srcOffscreen,
+            selectOffscreen = selectOffscreen,
+            rIdx            = rIdx,
+            gIdx            = gIdx,
+            bIdx            = bIdx,
+            radius          = 3,
+        };
 
-            TriglavPlugInFilterRunSetProgressTotal(record, host, blockCount);
-
-            bool restart    = true;
-            int  blockIndex = 0;
-            int  radius     = 3;
-
-            while (true)
+        return EffectHelper.RunPreviewLoop(
+            pluginServer, dstOffscreen, &selectRect,
+            readParameters: (propSvc, propObj) =>
             {
-                if (restart)
-                {
-                    restart = false;
+                int v = s.radius;
+                propSvc->getIntegerValueProc(&v, propObj, ItemKeyRadius);
+                s.radius = v;
+            },
+            processBlock: (osSvc, dst, blockRect, idx) =>
+            {
+                ProcessBlock(osSvc, dst, s.srcOffscreen, s.selectOffscreen,
+                             ref blockRect, s.rIdx, s.gIdx, s.bIdx, s.radius);
+            });
+    }
 
-                    int procResult = kTriglavPlugInFilterRunProcessResultContinue;
-                    TriglavPlugInFilterRunProcess(record, &procResult, host,
-                        kTriglavPlugInFilterRunProcessStateStart);
-                    if (procResult == kTriglavPlugInFilterRunProcessResultExit) break;
-
-                    propertySvc->getIntegerValueProc(&radius, propObj, ItemKeyRadius);
-                    blockIndex = 0;
-                }
-
-                if (blockIndex < blockCount)
-                {
-                    TriglavPlugInFilterRunSetProgressDone(record, host, blockIndex);
-                    ProcessBlock(offscreenSvc, dstOffscreen, srcOffscreen, selectOffscreen,
-                                 ref blockRects[blockIndex], rIdx, gIdx, bIdx, radius);
-                    fixed (TriglavPlugInRect* pBlockRects = blockRects)
-                        TriglavPlugInFilterRunUpdateDestinationOffscreenRect(
-                            record, host, pBlockRects + blockIndex);
-                    blockIndex++;
-                }
-
-                {
-                    int procResult = kTriglavPlugInFilterRunProcessResultContinue;
-                    int procState  = blockIndex < blockCount
-                        ? kTriglavPlugInFilterRunProcessStateContinue
-                        : kTriglavPlugInFilterRunProcessStateEnd;
-                    if (procState == kTriglavPlugInFilterRunProcessStateEnd)
-                        TriglavPlugInFilterRunSetProgressDone(record, host, blockCount);
-                    TriglavPlugInFilterRunProcess(record, &procResult, host, procState);
-                    if      (procResult == kTriglavPlugInFilterRunProcessResultRestart) restart = true;
-                    else if (procResult == kTriglavPlugInFilterRunProcessResultExit)    break;
-                }
-            }
-        }
-        finally
-        {
-            ArrayPool<TriglavPlugInRect>.Shared.Return(blockRects);
-        }
-
-        return kTriglavPlugInCallResultSuccess;
+    // ラムダキャプチャ用状態ホルダー（FilterRun スコープで生存）
+    private sealed class BlurRunState
+    {
+        public TriglavPlugInOffscreenObject srcOffscreen;
+        public TriglavPlugInOffscreenObject selectOffscreen;
+        public int rIdx, gIdx, bIdx, radius;
     }
 
     // ================================================================
@@ -187,9 +160,13 @@ public static unsafe class Blur
     }
 
     // ================================================================
-    // ブロック処理 — セパラブル Box Blur
+    // ブロック処理 — BlurKernel への委譲
     // ================================================================
 
+    /// <summary>
+    /// 1 ブロック分の Blur 処理を行います。
+    /// SDK からポインタを取得し、Span に変換して BlurKernel を呼び出します。
+    /// </summary>
     private static void ProcessBlock(
         TriglavPlugInOffscreenService* offscreenSvc,
         TriglavPlugInOffscreenObject   dstOffscreen,
@@ -215,110 +192,46 @@ public static unsafe class Blur
         int h = blockRect.bottom - blockRect.top;
         if (w <= 0 || h <= 0) return;
 
-        // 中間バッファ: 水平ぼかし後の R/G/B 値を格納（1ピクセル 1 int × 3 チャンネル）
         int size = w * h;
         int[] tmpR = ArrayPool<int>.Shared.Rent(size);
         int[] tmpG = ArrayPool<int>.Shared.Rent(size);
         int[] tmpB = ArrayPool<int>.Shared.Rent(size);
         try
         {
-            // --- パス 1: 水平方向の Box Blur (src → tmp) ---
-            byte* src = (byte*)srcImg;
-            for (int y = 0; y < h; y++)
-            {
-                for (int x = 0; x < w; x++)
-                {
-                    int sumR = 0, sumG = 0, sumB = 0;
-                    int x0 = x - radius >= 0 ? x - radius : 0;
-                    int x1 = x + radius <  w ? x + radius : w - 1;
-                    int cnt = x1 - x0 + 1;
-                    for (int nx = x0; nx <= x1; nx++)
-                    {
-                        byte* p = src + y * srcRowBytes + nx * srcPixBytes;
-                        sumR += p[rIdx]; sumG += p[gIdx]; sumB += p[bIdx];
-                    }
-                    int i = y * w + x;
-                    tmpR[i] = sumR / cnt;
-                    tmpG[i] = sumG / cnt;
-                    tmpB[i] = sumB / cnt;
-                }
-            }
+            var srcSpan   = new ReadOnlySpan<byte>(srcImg,   h * srcRowBytes);
+            var dstSpan   = new Span<byte>(dstImg,           h * dstRowBytes);
+            var alphaSpan = new ReadOnlySpan<byte>(dstAlpha, h * alphaRowBytes);
 
-            // --- パス 2: 垂直方向の Box Blur (tmp → dst) ---
+            // パス 1: 水平方向の Box Blur (src → tmp)
+            BlurKernel.HorizontalPass(
+                srcSpan, srcRowBytes, srcPixBytes,
+                tmpR, tmpG, tmpB,
+                w, h, rIdx, gIdx, bIdx, radius);
+
+            // パス 2: 垂直方向の Box Blur (tmp → dst)
             if (selectOffscreen.value == null)
             {
-                // 選択範囲なし
-                byte* dst   = (byte*)dstImg;
-                byte* alpha = (byte*)dstAlpha;
-                for (int y = 0; y < h; y++)
-                {
-                    for (int x = 0; x < w; x++)
-                    {
-                        if (alpha[y * alphaRowBytes + x * alphaPixBytes] == 0) continue;
-
-                        int sumR = 0, sumG = 0, sumB = 0;
-                        int y0 = y - radius >= 0 ? y - radius : 0;
-                        int y1 = y + radius <  h ? y + radius : h - 1;
-                        int cnt = y1 - y0 + 1;
-                        for (int ny = y0; ny <= y1; ny++)
-                        {
-                            int i = ny * w + x;
-                            sumR += tmpR[i]; sumG += tmpG[i]; sumB += tmpB[i];
-                        }
-                        byte* d = dst + y * dstRowBytes + x * dstPixBytes;
-                        d[rIdx] = (byte)(sumR / cnt);
-                        d[gIdx] = (byte)(sumG / cnt);
-                        d[bIdx] = (byte)(sumB / cnt);
-                    }
-                }
+                BlurKernel.VerticalPass(
+                    dstSpan, dstRowBytes, dstPixBytes,
+                    alphaSpan, alphaRowBytes, alphaPixBytes,
+                    tmpR, tmpG, tmpB,
+                    w, h, rIdx, gIdx, bIdx, radius);
             }
             else
             {
-                // 選択範囲あり: selVal=255 でフル適用、1〜254 でマスク合成
                 void* selPtr; int selRowBytes, selPixBytes;
                 offscreenSvc->getBlockSelectAreaProc(
                     &selPtr, &selRowBytes, &selPixBytes, &outRect, selectOffscreen, &pos);
                 if (selPtr == null) return;
 
-                byte* dst   = (byte*)dstImg;
-                byte* alpha = (byte*)dstAlpha;
-                byte* sel   = (byte*)selPtr;
-                for (int y = 0; y < h; y++)
-                {
-                    for (int x = 0; x < w; x++)
-                    {
-                        if (alpha[y * alphaRowBytes + x * alphaPixBytes] == 0) continue;
-
-                        byte selVal = sel[y * selRowBytes + x * selPixBytes];
-                        if (selVal == 0) continue;
-
-                        int sumR = 0, sumG = 0, sumB = 0;
-                        int y0 = y - radius >= 0 ? y - radius : 0;
-                        int y1 = y + radius <  h ? y + radius : h - 1;
-                        int cnt = y1 - y0 + 1;
-                        for (int ny = y0; ny <= y1; ny++)
-                        {
-                            int i = ny * w + x;
-                            sumR += tmpR[i]; sumG += tmpG[i]; sumB += tmpB[i];
-                        }
-                        int blurR = sumR / cnt, blurG = sumG / cnt, blurB = sumB / cnt;
-
-                        byte* d   = dst + y * dstRowBytes + x * dstPixBytes;
-                        byte* sp  = (byte*)srcImg + y * srcRowBytes + x * srcPixBytes;
-                        if (selVal == 255)
-                        {
-                            d[rIdx] = (byte)blurR;
-                            d[gIdx] = (byte)blurG;
-                            d[bIdx] = (byte)blurB;
-                        }
-                        else
-                        {
-                            d[rIdx] = (byte)Blend8(blurR, sp[rIdx], selVal);
-                            d[gIdx] = (byte)Blend8(blurG, sp[gIdx], selVal);
-                            d[bIdx] = (byte)Blend8(blurB, sp[bIdx], selVal);
-                        }
-                    }
-                }
+                var selSpan = new ReadOnlySpan<byte>(selPtr, h * selRowBytes);
+                BlurKernel.VerticalPassWithSelection(
+                    dstSpan,   dstRowBytes,   dstPixBytes,
+                    srcSpan,   srcRowBytes,   srcPixBytes,
+                    alphaSpan, alphaRowBytes, alphaPixBytes,
+                    selSpan,   selRowBytes,   selPixBytes,
+                    tmpR, tmpG, tmpB,
+                    w, h, rIdx, gIdx, bIdx, radius);
             }
         }
         finally
@@ -328,7 +241,4 @@ public static unsafe class Blur
             ArrayPool<int>.Shared.Return(tmpB);
         }
     }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static int Blend8(int dst, int src, int mask) => ((dst - src) * mask / 255) + src;
 }

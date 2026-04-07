@@ -1,5 +1,6 @@
 // このファイルは meson.build が effects.json をもとに自動生成します。
 // 手動で編集しないでください。元のテンプレートは EffectTemplate.cs.in です。
+using System;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using CSPBridgeEffects.Library.SDK;
@@ -21,32 +22,112 @@ public static unsafe class @EFFECT_ID@
         kTriglavPlugInFilterTargetKindRasterLayerGrayAlpha,
     ];
 
+    // ================================================================
+    // エントリポイント
+    // ================================================================
+
     /// <summary>モジュール初期化：モジュール ID とモジュール種別を設定します。</summary>
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static int ModuleInitialize(TriglavPlugInServer* pluginServer)
         => EffectHelper.InitializeModule(pluginServer, "@MODULE_ID@");
 
-    /// <summary>フィルタ初期化：カテゴリ名・フィルタ名・ターゲット種別を設定します。</summary>
+    /// <summary>フィルタ初期化：カテゴリ名・フィルタ名・ターゲット種別・パラメータ・コールバックを設定します。</summary>
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static int FilterInitialize(TriglavPlugInServer* pluginServer, void** data)
-        => EffectHelper.InitializeFilter(pluginServer, @EFFECT_ID@Meta.Category, @EFFECT_ID@Meta.FilterName, s_targetKinds);
-
-    /// <summary>フィルタ実行：ピクセル処理を行います。</summary>
-    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    public static int FilterRun(TriglavPlugInServer* pluginServer, void** data)
     {
-        var record = &pluginServer->recordSuite;
-        var host   = pluginServer->hostObject;
+        int rc = EffectHelper.InitializeFilter(
+            pluginServer, @EFFECT_ID@Meta.Category, @EFFECT_ID@Meta.FilterName, s_targetKinds);
+        if (rc != kTriglavPlugInCallResultSuccess) return rc;
 
-        int processResult = kTriglavPlugInFilterRunProcessResultContinue;
-        TriglavPlugInFilterRunProcess(record, &processResult, host, kTriglavPlugInFilterRunProcessStateStart);
-        TriglavPlugInFilterRunProcess(record, &processResult, host, kTriglavPlugInFilterRunProcessStateEnd);
+        // TODO: パラメータを追加する場合はここに propSvc->addItemProc() を記述
+        // var record  = &pluginServer->recordSuite;
+        // var service = &pluginServer->serviceSuite;
+        // var host    = pluginServer->hostObject;
+        // var propSvc = service->propertyService;
+        // TriglavPlugInPropertyObject propObj;
+        // propSvc->createProc(&propObj);
+        // var label = EffectHelper.CreateAsciiString(service->stringService, "Param");
+        // propSvc->addItemProc(propObj, ItemKey, ...);
+        // ...
+        // service->stringService->releaseProc(label);
+
+        // 重要: GCHandle.Alloc は SetPropertyCallBack より前に行うこと。
+        // SetPropertyCallBack に *data を渡すため、先に GCHandle を確保しておく必要がある。
+        var handle = GCHandle.Alloc(new object());
+        *data = (void*)GCHandle.ToIntPtr(handle);
+
+        // TODO: プロパティを使う場合は以下のコメントを解除
+        // var record  = &pluginServer->recordSuite;
+        // var service = &pluginServer->serviceSuite;
+        // var host    = pluginServer->hostObject;
+        // TriglavPlugInPropertyObject propObj;
+        // service->propertyService->createProc(&propObj);
+        // TriglavPlugInFilterInitializeSetProperty(record, host, propObj);
+        // TriglavPlugInFilterInitializeSetPropertyCallBack(record, host, &PropertyCallback, *data);
+        // service->propertyService->releaseProc(propObj);
 
         return kTriglavPlugInCallResultSuccess;
     }
 
-    /// <summary>フィルタ終了：リソースを解放します。</summary>
+    /// <summary>フィルタ終了：GCHandle を解放します。</summary>
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static int FilterTerminate(TriglavPlugInServer* pluginServer, void** data)
-        => kTriglavPlugInCallResultSuccess;
+    {
+        if (data != null && *data != null)
+        {
+            GCHandle.FromIntPtr((IntPtr)(*data)).Free();
+            *data = null;
+        }
+        return kTriglavPlugInCallResultSuccess;
+    }
+
+    /// <summary>フィルタ実行：RunPreviewLoop を使ってブロック単位でピクセル処理を行います。</summary>
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    public static int FilterRun(TriglavPlugInServer* pluginServer, void** data)
+    {
+        var record       = &pluginServer->recordSuite;
+        var offscreenSvc = pluginServer->serviceSuite.offscreenService;
+        var propertySvc  = pluginServer->serviceSuite.propertyService;
+
+        if (TriglavPlugInGetFilterRunRecord(record) == null
+            || offscreenSvc == null || propertySvc == null)
+            return kTriglavPlugInCallResultFailed;
+
+        var host = pluginServer->hostObject;
+
+        TriglavPlugInOffscreenObject dstOffscreen;
+        TriglavPlugInRect            selectRect;
+
+        TriglavPlugInFilterRunGetDestinationOffscreen(record, &dstOffscreen, host);
+        TriglavPlugInFilterRunGetSelectAreaRect(record, &selectRect, host);
+
+        return EffectHelper.RunPreviewLoop(
+            pluginServer, dstOffscreen, &selectRect,
+            readParameters: (propSvc, propObj) =>
+            {
+                // TODO: パラメータを読み取る
+            },
+            processBlock: (osSvc, dst, blockRect, idx) =>
+            {
+                // TODO: ピクセル処理を実装する
+            });
+    }
+
+    // ================================================================
+    // プロパティコールバック
+    // ================================================================
+
+    /// <summary>
+    /// プロパティ値変更時に FilterRun の再実行を促します。
+    /// SetPropertyCallBack に登録するコールバックです。
+    /// </summary>
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static void PropertyCallback(
+        int* result, TriglavPlugInPropertyObject propObj,
+        int itemKey, int notify, void* callbackData)
+    {
+        *result = notify == kTriglavPlugInPropertyCallBackNotifyValueChanged
+            ? kTriglavPlugInPropertyCallBackResultModify
+            : kTriglavPlugInPropertyCallBackResultNoModify;
+    }
 }

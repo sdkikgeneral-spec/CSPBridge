@@ -394,7 +394,7 @@ public static unsafe class @EFFECT_ID@
             {
                 // TODO: パラメータを読み取る
             },
-            processBlock: (osSvc, dst, ref blockRect, idx) =>
+            processBlock: (osSvc, dst, blockRect, idx) =>
             {
                 // TODO: ピクセル処理を実装する
             });

@@ -2,9 +2,9 @@
 // CSP_FilterPlugIn/FilterPlugIn/Source/HSV/PIHSVMain.cpp を C# に移植したものです。
 // EffectTemplate.cs.in と同じ 4 エントリポイント構造で実装しています。
 using System;
-using System.Buffers;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using CSPBridgeEffects.Effects.Kernels;
 using CSPBridgeEffects.Library.SDK;
 using static CSPBridgeEffects.Library.SDK.CSPBridgeEffectsLibDefine;
 using static CSPBridgeEffects.Library.SDK.CSPBridgeEffectsLibRecordFunction;
@@ -137,11 +137,9 @@ public static unsafe class HSV
 
         var host = pluginServer->hostObject;
 
-        TriglavPlugInPropertyObject  propObj;
         TriglavPlugInOffscreenObject dstOffscreen, selectOffscreen;
         TriglavPlugInRect            selectRect;
 
-        TriglavPlugInFilterRunGetProperty(record, &propObj, host);
         TriglavPlugInFilterRunGetDestinationOffscreen(record, &dstOffscreen, host);
         TriglavPlugInFilterRunGetSelectAreaRect(record, &selectRect, host);
         TriglavPlugInFilterRunGetSelectAreaOffscreen(record, &selectOffscreen, host);
@@ -149,87 +147,57 @@ public static unsafe class HSV
         int rIdx, gIdx, bIdx;
         offscreenSvc->getRGBChannelIndexProc(&rIdx, &gIdx, &bIdx, dstOffscreen);
 
-        // ブロック矩形リストを構築
-        int blockCount;
-        offscreenSvc->getBlockRectCountProc(&blockCount, dstOffscreen, &selectRect);
-        var blockRects = ArrayPool<TriglavPlugInRect>.Shared.Rent(blockCount);
-        try
+        // ラムダキャプチャのため参照型ホルダーに状態を格納する。
+        // 全パラメータ 0 のときは processBlock 内でピクセル処理をスキップする。
+        var s = new HsvRunState
         {
-            fixed (TriglavPlugInRect* pBlockRects = blockRects)
-                for (int i = 0; i < blockCount; i++)
-                    offscreenSvc->getBlockRectProc(pBlockRects + i, i, dstOffscreen, &selectRect);
+            selectOffscreen = selectOffscreen,
+            rIdx            = rIdx,
+            gIdx            = gIdx,
+            bIdx            = bIdx,
+            skipProcessing  = true,
+        };
 
-            TriglavPlugInFilterRunSetProgressTotal(record, host, blockCount);
-
-            // ---- プレビュー対応メインループ ----
-            bool restart    = true;
-            int  blockIndex = 0;
-            int  hFilter = 0, sFilter = 0, vFilter = 0;
-
-            while (true)
+        return EffectHelper.RunPreviewLoop(
+            pluginServer, dstOffscreen, &selectRect,
+            readParameters: (propSvc, propObj) =>
             {
-                if (restart)
+                int h = 0, sat = 0, v = 0;
+                propSvc->getIntegerValueProc(&h,   propObj, ItemKeyHue);
+                propSvc->getIntegerValueProc(&sat, propObj, ItemKeySaturation);
+                propSvc->getIntegerValueProc(&v,   propObj, ItemKeyValue);
+
+                if (h != 0 || sat != 0 || v != 0)
                 {
-                    restart = false;
-
-                    int procResult = kTriglavPlugInFilterRunProcessResultContinue;
-                    TriglavPlugInFilterRunProcess(record, &procResult, host,
-                        kTriglavPlugInFilterRunProcessStateStart);
-                    if (procResult == kTriglavPlugInFilterRunProcessResultExit) break;
-
-                    // 現在のパラメータを読み取り内部スケールに変換
-                    int h, s, v;
-                    propertySvc->getIntegerValueProc(&h, propObj, ItemKeyHue);
-                    propertySvc->getIntegerValueProc(&s, propObj, ItemKeySaturation);
-                    propertySvc->getIntegerValueProc(&v, propObj, ItemKeyValue);
-
-                    if (h != 0 || s != 0 || v != 0)
-                    {
-                        blockIndex = 0;
-                        int hue = h < 0 ? h + 360 : h;
-                        hFilter = hue * HsvHFilterMax / 360;
-                        sFilter = s   * HsvSFilterMax / 100;
-                        vFilter = v   * HsvVFilterMax / 100;
-                    }
-                    else
-                    {
-                        // 全パラメータ 0: 処理不要、選択範囲全体をそのまま更新
-                        blockIndex = blockCount;
-                        TriglavPlugInFilterRunUpdateDestinationOffscreenRect(record, host, &selectRect);
-                    }
+                    int hue = h < 0 ? h + 360 : h;
+                    s.hFilter       = hue * HsvHFilterMax / 360;
+                    s.sFilter       = sat * HsvSFilterMax / 100;
+                    s.vFilter       = v   * HsvVFilterMax / 100;
+                    s.skipProcessing = false;
                 }
-
-                if (blockIndex < blockCount)
+                else
                 {
-                    TriglavPlugInFilterRunSetProgressDone(record, host, blockIndex);
-                    ProcessBlock(offscreenSvc, dstOffscreen, selectOffscreen,
-                                 ref blockRects[blockIndex],
-                                 rIdx, gIdx, bIdx, hFilter, sFilter, vFilter);
-                    fixed (TriglavPlugInRect* pBlockRects = blockRects)
-                        TriglavPlugInFilterRunUpdateDestinationOffscreenRect(
-                            record, host, pBlockRects + blockIndex);
-                    blockIndex++;
+                    // 全パラメータ 0: ピクセル処理不要
+                    s.hFilter = s.sFilter = s.vFilter = 0;
+                    s.skipProcessing = true;
                 }
+            },
+            processBlock: (osSvc, dst, blockRect, idx) =>
+            {
+                if (s.skipProcessing) return;
+                ProcessBlock(osSvc, dst, s.selectOffscreen,
+                             ref blockRect, s.rIdx, s.gIdx, s.bIdx,
+                             s.hFilter, s.sFilter, s.vFilter);
+            });
+    }
 
-                {
-                    int procResult = kTriglavPlugInFilterRunProcessResultContinue;
-                    int procState  = blockIndex < blockCount
-                        ? kTriglavPlugInFilterRunProcessStateContinue
-                        : kTriglavPlugInFilterRunProcessStateEnd;
-                    if (procState == kTriglavPlugInFilterRunProcessStateEnd)
-                        TriglavPlugInFilterRunSetProgressDone(record, host, blockCount);
-                    TriglavPlugInFilterRunProcess(record, &procResult, host, procState);
-                    if      (procResult == kTriglavPlugInFilterRunProcessResultRestart) restart = true;
-                    else if (procResult == kTriglavPlugInFilterRunProcessResultExit)    break;
-                }
-            }
-        }
-        finally
-        {
-            ArrayPool<TriglavPlugInRect>.Shared.Return(blockRects);
-        }
-
-        return kTriglavPlugInCallResultSuccess;
+    // ラムダキャプチャ用状態ホルダー（FilterRun スコープで生存）
+    private sealed class HsvRunState
+    {
+        public TriglavPlugInOffscreenObject selectOffscreen;
+        public int rIdx, gIdx, bIdx;
+        public int hFilter, sFilter, vFilter;
+        public bool skipProcessing;
     }
 
     // ================================================================
@@ -251,9 +219,13 @@ public static unsafe class HSV
     }
 
     // ================================================================
-    // ブロック処理（選択範囲の有無で分岐）
+    // ブロック処理 — HsvKernel への委譲
     // ================================================================
 
+    /// <summary>
+    /// 1 ブロック分の HSV 処理を行います。
+    /// SDK からポインタを取得し、Span に変換して HsvKernel を呼び出します。
+    /// </summary>
     private static void ProcessBlock(
         TriglavPlugInOffscreenService* offscreenSvc,
         TriglavPlugInOffscreenObject   dstOffscreen,
@@ -272,252 +244,35 @@ public static unsafe class HSV
 
         if (dstImg == null || dstAlpha == null) return;
 
+        int w = blockRect.right  - blockRect.left;
+        int h = blockRect.bottom - blockRect.top;
+        if (w <= 0 || h <= 0) return;
+
+        var dstSpan   = new Span<byte>(dstImg,           h * dstRowBytes);
+        var alphaSpan = new ReadOnlySpan<byte>(dstAlpha, h * alphaRowBytes);
+
         if (selectOffscreen.value == null)
         {
-            // 選択範囲なし: アルファ > 0 の全ピクセルを処理
-            byte* imgY   = (byte*)dstImg;
-            byte* alphaY = (byte*)dstAlpha;
-            for (int y = blockRect.top; y < blockRect.bottom; y++)
-            {
-                byte* imgX   = imgY;
-                byte* alphaX = alphaY;
-                for (int x = blockRect.left; x < blockRect.right; x++)
-                {
-                    if (*alphaX > 0)
-                        ApplyHsv(imgX, rIdx, gIdx, bIdx, hFilter, sFilter, vFilter);
-                    imgX   += dstPixBytes;
-                    alphaX += alphaPixBytes;
-                }
-                imgY   += dstRowBytes;
-                alphaY += alphaRowBytes;
-            }
+            HsvKernel.Process(
+                dstSpan,   dstRowBytes,   dstPixBytes,
+                alphaSpan, alphaRowBytes, alphaPixBytes,
+                w, h, rIdx, gIdx, bIdx,
+                hFilter, sFilter, vFilter);
         }
         else
         {
-            // 選択範囲あり: 選択値 255 でフル適用、1〜254 でマスク合成
             void* selPtr; int selRowBytes, selPixBytes;
             offscreenSvc->getBlockSelectAreaProc(
                 &selPtr, &selRowBytes, &selPixBytes, &tempRect, selectOffscreen, &pos);
             if (selPtr == null) return;
 
-            byte* imgY   = (byte*)dstImg;
-            byte* alphaY = (byte*)dstAlpha;
-            byte* selY   = (byte*)selPtr;
-            for (int y = blockRect.top; y < blockRect.bottom; y++)
-            {
-                byte* imgX   = imgY;
-                byte* alphaX = alphaY;
-                byte* selX   = selY;
-                for (int x = blockRect.left; x < blockRect.right; x++)
-                {
-                    if (*alphaX > 0)
-                    {
-                        if (*selX == 255)
-                            ApplyHsv(imgX, rIdx, gIdx, bIdx, hFilter, sFilter, vFilter);
-                        else if (*selX != 0)
-                            ApplyHsvMask(imgX, rIdx, gIdx, bIdx, *selX, hFilter, sFilter, vFilter);
-                    }
-                    imgX   += dstPixBytes;
-                    alphaX += alphaPixBytes;
-                    selX   += selPixBytes;
-                }
-                imgY   += dstRowBytes;
-                alphaY += alphaRowBytes;
-                selY   += selRowBytes;
-            }
+            var selSpan = new ReadOnlySpan<byte>(selPtr, h * selRowBytes);
+            HsvKernel.ProcessWithSelection(
+                dstSpan,   dstRowBytes,   dstPixBytes,
+                alphaSpan, alphaRowBytes, alphaPixBytes,
+                selSpan,   selRowBytes,   selPixBytes,
+                w, h, rIdx, gIdx, bIdx,
+                hFilter, sFilter, vFilter);
         }
-    }
-
-    // ================================================================
-    // HSV 数学処理（PIHSVFilter.h の C# 移植）
-    // ================================================================
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void ApplyHsv(byte* pixel, int r, int g, int b,
-        int hFilter, int sFilter, int vFilter)
-    {
-        RgbToHsv(out uint uH, out uint uS, out uint uV, pixel[r], pixel[g], pixel[b]);
-        HsvFilter(ref uH, ref uS, ref uV, hFilter, sFilter, vFilter);
-        HsvToRgb(out uint uR, out uint uG, out uint uB, uH, uS, uV);
-        pixel[r] = (byte)uR;
-        pixel[g] = (byte)uG;
-        pixel[b] = (byte)uB;
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void ApplyHsvMask(byte* pixel, int r, int g, int b, byte mask,
-        int hFilter, int sFilter, int vFilter)
-    {
-        RgbToHsv(out uint uH, out uint uS, out uint uV, pixel[r], pixel[g], pixel[b]);
-        HsvFilter(ref uH, ref uS, ref uV, hFilter, sFilter, vFilter);
-        HsvToRgb(out uint uR, out uint uG, out uint uB, uH, uS, uV);
-        pixel[r] = (byte)Blend8((int)uR, pixel[r], mask);
-        pixel[g] = (byte)Blend8((int)uG, pixel[g], mask);
-        pixel[b] = (byte)Blend8((int)uB, pixel[b], mask);
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static int Blend8(int dst, int src, int mask)
-        => ((dst - src) * mask / 255) + src;
-
-    /// <summary>
-    /// RGB (各 0〜255) を HSV に変換します。
-    /// H: 0〜6*32768, S: 0〜65536, V: 0〜255
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void RgbToHsv(out uint ruH, out uint ruS, out uint ruV,
-        uint r, uint g, uint b)
-    {
-        uint uMax, uMin;
-        if (r >= g && r >= b)
-        {
-            uMax = r;
-            uMin = g >= b ? b : g;
-        }
-        else if (g >= b)   // g > r (前段で除外済み), g >= b → G が最大
-        {
-            uMax = g;
-            uMin = r >= b ? b : r;
-        }
-        else               // b が最大
-        {
-            uMax = b;
-            uMin = r >= g ? g : r;
-        }
-
-        uint uD = uMax - uMin;
-        uint uS = uMax == 0u ? 0u : (uD << 16) / uMax;
-
-        int nH;
-        if (uS == 0u)
-        {
-            nH = 0;
-        }
-        else if (uMax == r)
-        {
-            nH = GetH(g, b, uD);
-            if (nH < 0) nH += 6 * 32768;
-        }
-        else if (uMax == g)
-        {
-            nH = GetH(b, r, uD) + 2 * 32768;
-        }
-        else
-        {
-            nH = GetH(r, g, uD) + 4 * 32768;
-        }
-
-        ruH = (uint)nH;
-        ruS = uS;
-        ruV = uMax;
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static int GetH(uint c1, uint c2, uint d)
-        => c1 >= c2
-            ?  (int)((c1 - c2) << 15) / (int)d
-            : -((int)((c2 - c1) << 15) / (int)d);
-
-    /// <summary>
-    /// HSV (H: 0〜6*32768, S: 0〜65536, V: 0〜255) を RGB に変換します。
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void HsvToRgb(out uint ruR, out uint ruG, out uint ruB,
-        uint h, uint s, uint v)
-    {
-        uint f = h & 32767u;
-        switch (h >> 15)
-        {
-            case 0:  ruR = v;            ruG = GetP3(v,s,f); ruB = GetP1(v,s); break;
-            case 1:  ruR = GetP2(v,s,f); ruG = v;            ruB = GetP1(v,s); break;
-            case 2:  ruR = GetP1(v,s);   ruG = v;            ruB = GetP3(v,s,f); break;
-            case 3:  ruR = GetP1(v,s);   ruG = GetP2(v,s,f); ruB = v;            break;
-            case 4:  ruR = GetP3(v,s,f); ruG = GetP1(v,s);   ruB = v;            break;
-            default: ruR = v;            ruG = GetP1(v,s);   ruB = GetP2(v,s,f); break;
-        }
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static uint GetP1(uint v, uint s) => (v * (65536u - s)) >> 16;
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static uint GetP2(uint v, uint s, uint f) => (v * (65536u - ((s * f) >> 15))) >> 16;
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static uint GetP3(uint v, uint s, uint f) => (v * (65536u - ((s * (32768u - f)) >> 15))) >> 16;
-
-    /// <summary>
-    /// HSV フィルタ調整値を H/S/V に適用します（PIHSVFilter::HSVFilter の移植）。
-    /// hFilter: 0〜6*32768, sFilter/vFilter: -32768〜32768
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void HsvFilter(ref uint ruH, ref uint ruS, ref uint ruV,
-        int hFilter, int sFilter, int vFilter)
-    {
-        const int HMax = 6 * 32768;
-        const int SMax = 65536;
-        const int VMax = 255;
-
-        int nH = (int)ruH;
-        int nS = (int)ruS;
-        int nV = (int)ruV;
-
-        // 色相: 加算して 0〜HMax に折り返す
-        if (hFilter != 0)
-        {
-            nH += hFilter;
-            if (nH >= HMax) nH -= HMax;
-        }
-
-        // 明度: 正で増加（上限 VMax に近づく）、負で減少
-        if (vFilter != 0)
-        {
-            if (vFilter > 0)
-            {
-                nV += (int)(((uint)(VMax - nV) * (uint)vFilter) >> 15);
-                if (nV > VMax) nV = VMax;
-                nS -= (int)(((uint)nS * (uint)vFilter) >> 15);
-                if (nS < 0) nS = 0;
-            }
-            else
-            {
-                nV -= (int)(((uint)nV * (uint)(-vFilter)) >> 15);
-                if (nV < 0) nV = 0;
-            }
-        }
-
-        // 彩度: 有彩色のみ処理
-        if (sFilter != 0 && nS > 0 && nV > 0)
-        {
-            if (sFilter > 0)
-            {
-                int nSat = (int)(((uint)(SMax - nS) * (uint)sFilter) >> 15);
-                int nVal = (int)(((uint)nV * (uint)nSat) >> 16);
-                int nV2  = nV;
-                nV += nVal;
-                if (nV > VMax)
-                {
-                    nV  = VMax;
-                    // V の実際の増加量に比例して S を補正
-                    if (nVal > 0)
-                        nS += (int)((uint)nSat * (uint)(nV - nV2) / (uint)nVal);
-                }
-                else
-                {
-                    nS += nSat;
-                }
-                if (nS > SMax) nS = SMax;
-            }
-            else
-            {
-                int nS2 = nS;
-                nS -= (int)(((uint)nS * (uint)(-sFilter)) >> 15);
-                if (nS < 0) nS = 0;
-                nV -= (int)(((uint)(nS2 - nS) * (uint)nV) >> 17);
-                if (nV < 0) nV = 0;
-            }
-        }
-
-        ruH = (uint)nH;
-        ruS = (uint)nS;
-        ruV = (uint)nV;
     }
 }
