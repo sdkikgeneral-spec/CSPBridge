@@ -218,7 +218,7 @@ public static unsafe class Sharpen
             var alphaSpan = new ReadOnlySpan<byte>(dstAlpha, h * alphaRowBytes);
 
             // パス 1: 水平方向 Box Blur (src → tmp)
-            SharpenKernel.HorizontalPass(
+            KernelUtils.HorizontalBoxBlur(
                 srcSpan, srcRowBytes, srcPixBytes,
                 tmpR, tmpG, tmpB,
                 w, h, rIdx, gIdx, bIdx, radius);

@@ -5,24 +5,24 @@ namespace CSPBridgeEffects.Effects;
 
 internal static class BlurMeta
 {
-    public const string Category   = "CSPBridge Samples";
-    public const string FilterName = "Blur";
+    internal const string Category   = "CSPBridge Samples";
+    internal const string FilterName = "Blur";
 }
 
 internal static class SharpenMeta
 {
-    public const string Category   = "CSPBridge Samples";
-    public const string FilterName = "Sharpen";
+    internal const string Category   = "CSPBridge Samples";
+    internal const string FilterName = "Sharpen";
 }
 
 internal static class MosaicMeta
 {
-    public const string Category   = "CSPBridge Samples";
-    public const string FilterName = "Mosaic";
+    internal const string Category   = "CSPBridge Samples";
+    internal const string FilterName = "Mosaic";
 }
 
 internal static class HSVMeta
 {
-    public const string Category   = "CSPBridge Samples";
-    public const string FilterName = "HSV";
+    internal const string Category   = "CSPBridge Samples";
+    internal const string FilterName = "HSV";
 }

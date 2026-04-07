@@ -122,6 +122,9 @@ internal static unsafe class EffectHelper
         ReadParametersDelegate       readParameters,
         ProcessBlockDelegate         processBlock)
     {
+        if (readParameters == null || processBlock == null)
+            return kTriglavPlugInCallResultFailed;
+
         var record       = &server->recordSuite;
         var host         = server->hostObject;
         var offscreenSvc = server->serviceSuite.offscreenService;
