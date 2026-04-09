@@ -231,6 +231,7 @@ internal static class HsvKernel
         {
             nH += hFilter;
             if (nH >= HMax) nH -= HMax;
+            else if (nH < 0) nH += HMax;
         }
 
         if (vFilter != 0)
@@ -239,6 +240,7 @@ internal static class HsvKernel
             {
                 nV += (int)(((uint)(VMax - nV) * (uint)vFilter) >> 15);
                 if (nV > VMax) nV = VMax;
+                // 明度を上げると白に近づくため、彩度を比例的に下げる（PIHSVFilter.h 移植仕様）
                 nS -= (int)(((uint)nS * (uint)vFilter) >> 15);
                 if (nS < 0) nS = 0;
             }

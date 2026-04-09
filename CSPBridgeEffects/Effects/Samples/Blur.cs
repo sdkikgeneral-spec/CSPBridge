@@ -133,7 +133,7 @@ public static unsafe class Blur
             processBlock: (osSvc, dst, blockRect, idx) =>
             {
                 ProcessBlock(osSvc, dst, s.srcOffscreen, s.selectOffscreen,
-                             ref blockRect, s.rIdx, s.gIdx, s.bIdx, s.radius);
+                             blockRect, s.rIdx, s.gIdx, s.bIdx, s.radius);
             });
     }
 
@@ -172,7 +172,7 @@ public static unsafe class Blur
         TriglavPlugInOffscreenObject   dstOffscreen,
         TriglavPlugInOffscreenObject   srcOffscreen,
         TriglavPlugInOffscreenObject   selectOffscreen,
-        ref TriglavPlugInRect          blockRect,
+        TriglavPlugInRect              blockRect,
         int rIdx, int gIdx, int bIdx, int radius)
     {
         var pos = new TriglavPlugInPoint { x = blockRect.left, y = blockRect.top };

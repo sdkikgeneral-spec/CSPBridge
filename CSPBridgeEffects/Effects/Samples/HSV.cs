@@ -186,7 +186,7 @@ public static unsafe class HSV
             {
                 if (s.skipProcessing) return;
                 ProcessBlock(osSvc, dst, s.selectOffscreen,
-                             ref blockRect, s.rIdx, s.gIdx, s.bIdx,
+                             blockRect, s.rIdx, s.gIdx, s.bIdx,
                              s.hFilter, s.sFilter, s.vFilter);
             });
     }
@@ -230,7 +230,7 @@ public static unsafe class HSV
         TriglavPlugInOffscreenService* offscreenSvc,
         TriglavPlugInOffscreenObject   dstOffscreen,
         TriglavPlugInOffscreenObject   selectOffscreen,
-        ref TriglavPlugInRect          blockRect,
+        TriglavPlugInRect              blockRect,
         int rIdx, int gIdx, int bIdx,
         int hFilter, int sFilter, int vFilter)
     {

@@ -284,11 +284,11 @@ CSPBridgeEffects/
 
 CSPBridgeEffects.Tests/          # 新規: xUnit テストプロジェクト
 ├── CSPBridgeEffects.Tests.csproj
-├── Kernels/
-│   ├── BlurKernelTests.cs
-│   ├── SharpenKernelTests.cs
-│   ├── MosaicKernelTests.cs
-│   └── HsvKernelTests.cs
+├── BlurKernelTests.cs
+├── SharpenKernelTests.cs
+├── MosaicKernelTests.cs
+├── HsvKernelTests.cs
+└── KernelUtilsTests.cs
 ```
 
 ---
@@ -518,13 +518,13 @@ internal static void HorizontalPass(...)
 
 ### v2.0 — アーキテクチャ整備
 
-| タスク | 概要 | 依存 |
-| --- | --- | --- |
-| `RunPreviewLoop` 実装 | EffectHelper にプレビューループ共通化メソッドを追加 | なし |
-| 既存エフェクトのリファクタリング | Blur → Sharpen → Mosaic → HSV の順で適用 | RunPreviewLoop |
-| カーネル分離 | `BlurKernel` 等を `Kernels/` に切り出し | なし |
-| xUnit テスト導入 | `CSPBridgeEffects.Tests` プロジェクト作成 | カーネル分離 |
-| テンプレート改善 | `EffectTemplate.cs.in` を v2 版に更新 | RunPreviewLoop |
+| 状態 | タスク | 概要 | 依存 |
+| --- | --- | --- | --- |
+| [x] | `RunPreviewLoop` 実装 | EffectHelper にプレビューループ共通化メソッドを追加 | なし |
+| [x] | 既存エフェクトのリファクタリング | Blur → Sharpen → Mosaic → HSV の順で適用 | RunPreviewLoop |
+| [x] | カーネル分離 | `BlurKernel` 等を `Kernels/` に切り出し | なし |
+| [x] | xUnit テスト導入 | `CSPBridgeEffects.Tests` プロジェクト作成 | カーネル分離 |
+| [x] | テンプレート改善 | `EffectTemplate.cs.in` を v2 版に更新 | RunPreviewLoop |
 
 ### v2.1 — パフォーマンス基盤
 

@@ -43,11 +43,17 @@ CSPBridge/
 │   │   ├── EffectTemplate.cs.in   # エフェクトクラスのテンプレート
 │   │   ├── EffectMeta.cs.in       # エフェクトメタデータクラスのテンプレート
 │   │   ├── EffectHelper.cs        # モジュール・フィルタ初期化ヘルパー
-│   │   └── Samples/               # サンプルエフェクト実装
-│   │       ├── Blur.cs
-│   │       ├── Sharpen.cs
-│   │       ├── Mosaic.cs
-│   │       └── HSV.cs
+│   │   ├── Samples/               # サンプルエフェクト実装
+│   │   │   ├── Blur.cs
+│   │   │   ├── Sharpen.cs
+│   │   │   ├── Mosaic.cs
+│   │   │   └── HSV.cs
+│   │   └── Kernels/               # SDK 非依存のピクセル処理ロジック（ユニットテスト可能）
+│   │       ├── BlurKernel.cs
+│   │       ├── SharpenKernel.cs
+│   │       ├── MosaicKernel.cs
+│   │       ├── HsvKernel.cs
+│   │       └── KernelUtils.cs     # カーネル共通ユーティリティ
 │   └── Library/
 │       └── SDK/              # TriglavPlugIn SDK の C# バインディング
 │

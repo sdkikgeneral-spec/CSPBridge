@@ -10,6 +10,10 @@
     <GeneratedEffectsDir></GeneratedEffectsDir>
   </PropertyGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="CSPBridgeEffects.Tests" />
+  </ItemGroup>
+
   <!-- meson ビルド時：生成された .cs ファイルをコンパイル対象に追加 -->
   <ItemGroup Condition="'$(GeneratedEffectsDir)' != ''">
     <Compile Include="$(GeneratedEffectsDir)*.cs" />

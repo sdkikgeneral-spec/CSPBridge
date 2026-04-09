@@ -128,7 +128,7 @@ public static unsafe class Mosaic
             processBlock: (osSvc, dst, blockRect, idx) =>
             {
                 ProcessBlock(osSvc, dst, s.selectOffscreen,
-                             ref blockRect, s.rIdx, s.gIdx, s.bIdx, s.cellSize);
+                             blockRect, s.rIdx, s.gIdx, s.bIdx, s.cellSize);
             });
     }
 
@@ -165,7 +165,7 @@ public static unsafe class Mosaic
         TriglavPlugInOffscreenService* offscreenSvc,
         TriglavPlugInOffscreenObject   dstOffscreen,
         TriglavPlugInOffscreenObject   selectOffscreen,
-        ref TriglavPlugInRect          blockRect,
+        TriglavPlugInRect              blockRect,
         int rIdx, int gIdx, int bIdx, int cellSize)
     {
         var pos = new TriglavPlugInPoint { x = blockRect.left, y = blockRect.top };
