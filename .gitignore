@@ -14,6 +14,8 @@ CSPBridgeBase/CSPBridgeBase/
 CSPBridgeBase/x64/
 CSPBridgeEffects/bin/
 CSPBridgeEffects/obj/
+CSPBridgeEffects.Tests/bin/
+CSPBridgeEffects.Tests/obj/
 
 # Auto-fetched SDK
 CSP_FilterPlugIn/
